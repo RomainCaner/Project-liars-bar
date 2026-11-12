@@ -11,6 +11,22 @@ permissions:
   contents: write
 
 jobs:
+  # Version Unity : logique testée et scripts compilés contre les assemblages de référence d'Unity.
+  unity-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Tests de la logique (C#)
+        run: dotnet run --project "unity/Checks~/Logic"
+      - name: Scripts du jeu (UnityEngine)
+        run: dotnet build "unity/Checks~/Engine" -warnaserror:CS0103,CS0117,CS1061
+      - name: Scripts d'éditeur (UnityEditor)
+        run: dotnet build "unity/Checks~/Editor"
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 40

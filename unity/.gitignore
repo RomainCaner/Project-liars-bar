@@ -1,0 +1,25 @@
+# Dossiers générés par Unity
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+*.csproj
+*.sln
+*.user
+*.pidb
+*.booproj
+*.apk
+*.aab
+
+# Personnages KayKit : téléchargés par le menu « Menteur » (environ 100 Mo)
+/Assets/Resources/Characters/
+/Assets/Resources/Characters.meta
+
+# Projets de vérification .NET
+!/Checks~/**/*.csproj
+/Checks~/**/bin/
+/Checks~/**/obj/

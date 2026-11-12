@@ -50,6 +50,22 @@ namespace Menteur.Net
                 }
             }
             catch { }
+            if (result.Count == 0)
+            {
+                // Secours (certains Android n'énumèrent pas les interfaces) : l'adresse
+                // locale utilisée pour sortir, sans rien envoyer sur le réseau.
+                try
+                {
+                    using (var probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+                    {
+                        probe.Connect("192.168.255.255", 65530);
+                        if (probe.LocalEndPoint is IPEndPoint ep && !IPAddress.IsLoopback(ep.Address) &&
+                            !ep.Address.Equals(IPAddress.Any))
+                            result.Add(ep.Address);
+                    }
+                }
+                catch { }
+            }
             return result.OrderBy(a => IsPrivate(a) ? 0 : 1).ToList();
         }
 
