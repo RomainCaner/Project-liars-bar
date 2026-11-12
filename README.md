@@ -62,7 +62,7 @@ le Play Store, il faudrait une clé privée.
 
 ## Développement
 
-Prérequis : Flutter 3.50 (stable), Node 22 pour la scène 3D, le SDK Android pour compiler l'APK en local.
+Prérequis : Flutter 3.50 (stable), JDK 21, Node 22 pour la scène 3D, le SDK Android pour compiler l'APK en local.
 
 ```bash
 flutter pub get
