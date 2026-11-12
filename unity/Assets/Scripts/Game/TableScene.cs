@@ -156,8 +156,8 @@ namespace Menteur.Game
 
         void BuildCamera()
         {
-            foreach (var c in FindObjectsOfType<Camera>()) c.gameObject.SetActive(false);
-            foreach (var l in FindObjectsOfType<Light>()) l.gameObject.SetActive(false);
+            foreach (var c in FindObjectsByType<Camera>(FindObjectsSortMode.None)) c.gameObject.SetActive(false);
+            foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None)) l.gameObject.SetActive(false);
             var go = new GameObject("TableCamera");
             go.transform.SetParent(transform, false);
             Cam = go.AddComponent<Camera>();

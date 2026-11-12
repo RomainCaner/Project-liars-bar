@@ -16,7 +16,7 @@ namespace Menteur.Game
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
         {
-            if (FindObjectOfType<App>() != null) return;
+            if (FindFirstObjectByType<App>() != null) return;
             var go = new GameObject("Menteur");
             DontDestroyOnLoad(go);
             go.AddComponent<App>();
@@ -145,15 +145,6 @@ namespace Menteur.Game
         void Update()
         {
             Sfx.Tick();
-            if (Input.GetKeyDown(KeyCode.Escape))
-            {
-                if (screen == Screen_.Table) confirmLeave = !confirmLeave;
-                else if (screen != Screen_.Home)
-                {
-                    StopDiscovery();
-                    screen = Screen_.Home;
-                }
-            }
             if (session == null) return;
             session.Tick();
             while (session.Toasts.Count > 0) Toast(session.Toasts.Dequeue());
@@ -220,6 +211,18 @@ namespace Menteur.Game
 
         void OnGUI()
         {
+            // Retour Android / Échap (via IMGUI : marche avec l'ancien et le nouveau système d'entrée).
+            var e = Event.current;
+            if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
+            {
+                if (screen == Screen_.Table) confirmLeave = !confirmLeave;
+                else if (screen != Screen_.Home)
+                {
+                    StopDiscovery();
+                    screen = Screen_.Home;
+                }
+                e.Use();
+            }
             Ui.Begin();
             switch (screen)
             {

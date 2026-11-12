@@ -482,6 +482,7 @@ namespace Menteur.Session
                 if (t.Status == TaskStatus.RanToCompletion)
                 {
                     conn = t.Result;
+                    conn.Start();
                     Reconnecting = false;
                     attempts = 0;
                     lastHeard = lastPing = Now;

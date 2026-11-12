@@ -20,6 +20,11 @@ APK Android **et** version Windows depuis le même projet.
    **`unity`** (celui qui contient `Assets`, `Packages` et `ProjectSettings`), pas la racine du
    dépôt. Si Hub signale que la version d'éditeur du projet (2021.3) n'est pas installée,
    choisis la tienne : Unity met le projet à niveau tout seul.
+
+   **Si Hub répond « Veuillez ajouter un projet valide »** (certaines versions récentes de Hub
+   sont plus exigeantes) : crée un projet neuf depuis Hub (**Nouveau projet → 3D**, Built-In ou
+   Universal), ferme Unity, puis copie les dossiers `Assets/Scripts`, `Assets/Editor` et
+   `Assets/Resources` de ce dépôt dans le dossier `Assets` du nouveau projet, et rouvre-le.
 4. À la première ouverture, le projet se configure tout seul :
    - il crée la scène `Assets/Scenes/Main.unity` et règle le mode portrait ;
    - il propose de **télécharger les personnages 3D** (pack KayKit Adventurers, CC0, ~100 Mo).

@@ -86,14 +86,28 @@ namespace Menteur.Net
         volatile bool closed;
         public DateTime LastSeen = DateTime.UtcNow;
 
+        readonly Action<LineConnection, string> onLine;
+        readonly Action<LineConnection> onClosed;
+        readonly StreamReader reader;
+
         public LineConnection(int id, TcpClient tcp, Action<LineConnection, string> onLine, Action<LineConnection> onClosed)
         {
             Id = id;
             this.tcp = tcp;
+            this.onLine = onLine;
+            this.onClosed = onClosed;
             tcp.NoDelay = true;
             var stream = tcp.GetStream();
             writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
-            var reader = new StreamReader(stream, Encoding.UTF8);
+            reader = new StreamReader(stream, Encoding.UTF8);
+        }
+
+        /// <summary>
+        /// Démarre la lecture. À appeler une fois la connexion enregistrée par son propriétaire,
+        /// sinon les premiers messages pourraient arriver avant l'événement de connexion.
+        /// </summary>
+        public LineConnection Start()
+        {
             var t = new Thread(() =>
             {
                 try
@@ -110,6 +124,7 @@ namespace Menteur.Net
                 onClosed(this);
             }) { IsBackground = true, Name = "menteur-conn" };
             t.Start();
+            return this;
         }
 
         public bool Send(string line)
@@ -184,6 +199,7 @@ namespace Menteur.Net
                     },
                     cn => Events.Enqueue(new NetEvent { Type = NetEvent.Kind.Closed, Conn = cn }));
                 Events.Enqueue(new NetEvent { Type = NetEvent.Kind.Connected, Conn = conn });
+                conn.Start();
             }
         }
 
