@@ -13,13 +13,18 @@ APK Android **et** version Windows depuis le même projet.
 1. Installe **Unity Hub**, puis un éditeur **Unity 2021.3 LTS ou plus récent** (Unity 6 convient).
    Coche le module **Android Build Support** (avec *OpenJDK* et *Android SDK & NDK Tools*) si tu
    veux compiler l'APK.
-2. Dans Unity Hub : **Add → Add project from disk**, choisis le dossier `unity/` de ce dépôt.
-   Si Hub demande une version d'éditeur, prends celle que tu as installée.
-3. À la première ouverture, le projet se configure tout seul :
+2. Récupère le dépôt sur ton PC : sur GitHub, **Code → Download ZIP** puis dézippe
+   (ou `git clone`). N'utilise pas « Ajouter un projet depuis un dépôt » dans Unity Hub : il ne
+   cherche le projet qu'à la racine du dépôt, alors qu'il est dans le sous-dossier `unity/`.
+3. Dans Unity Hub : **Ajouter → Ajouter un projet depuis le disque**, et choisis le dossier
+   **`unity`** (celui qui contient `Assets`, `Packages` et `ProjectSettings`), pas la racine du
+   dépôt. Si Hub signale que la version d'éditeur du projet (2021.3) n'est pas installée,
+   choisis la tienne : Unity met le projet à niveau tout seul.
+4. À la première ouverture, le projet se configure tout seul :
    - il crée la scène `Assets/Scenes/Main.unity` et règle le mode portrait ;
    - il propose de **télécharger les personnages 3D** (pack KayKit Adventurers, CC0, ~100 Mo).
      Accepte : sans eux le jeu marche, mais avec des silhouettes simplifiées.
-4. Appuie sur **Play ▶**. Tout est créé en code au lancement : il n'y a aucun objet à placer
+5. Appuie sur **Play ▶**. Tout est créé en code au lancement : il n'y a aucun objet à placer
    dans la scène.
 
 Dans l'éditeur, règle la vue *Game* sur un format portrait (par ex. 1080×2400) pour voir le
