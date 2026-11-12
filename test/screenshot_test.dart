@@ -55,6 +55,14 @@ void main() {
     s.addBot();
     await t.pumpWidget(MaterialApp(theme: buildTheme(), home: TableScreen(session: s)));
     await t.pump(const Duration(milliseconds: 500));
+    // Les images d'assets se décodent hors du temps simulé.
+    await t.runAsync(() async {
+      final ctx = t.element(find.byType(TableScreen));
+      for (var i = 0; i < 5; i++) {
+        await precacheImage(AssetImage('assets/portraits/$i.png'), ctx);
+      }
+    });
+    await t.pump(const Duration(milliseconds: 100));
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('shots/2_lobby.png'));
 
     final e = s.engine;
@@ -90,7 +98,7 @@ void main() {
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('shots/5_roulette.png'));
 
     final shooter = e.seat(e.shooterId!);
-    shooter.bulletChamber = shooter.shotsFired;
+    shooter.bulletChambers = {shooter.shotsFired};
     e.pullTrigger(shooter.id);
     s.forceRefresh();
     for (var i = 0; i < 25; i++) {

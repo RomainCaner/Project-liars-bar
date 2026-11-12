@@ -16,6 +16,53 @@ class GameError implements Exception {
   String toString() => message;
 }
 
+/// Réglages choisis par l'hôte dans le salon.
+class GameSettings {
+  /// Jokers dans le paquet (0, 2 ou 4).
+  final int jokers;
+
+  /// Balles dans chaque barillet (1 ou 2).
+  final int bullets;
+
+  /// Le barillet est re-tourné avant chaque tir : risque constant.
+  final bool respin;
+
+  /// Temps de réflexion par tour, en secondes (0 = illimité).
+  final int turnSeconds;
+
+  const GameSettings({
+    this.jokers = 2,
+    this.bullets = 1,
+    this.respin = false,
+    this.turnSeconds = 0,
+  });
+
+  GameSettings copyWith({int? jokers, int? bullets, bool? respin, int? turnSeconds}) =>
+      GameSettings(
+        jokers: jokers ?? this.jokers,
+        bullets: bullets ?? this.bullets,
+        respin: respin ?? this.respin,
+        turnSeconds: turnSeconds ?? this.turnSeconds,
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'jokers': jokers, 'bullets': bullets, 'respin': respin, 'turn': turnSeconds};
+
+  factory GameSettings.fromJson(Map<String, dynamic> j) => GameSettings(
+        jokers: (j['jokers'] as num?)?.toInt() ?? 2,
+        bullets: (j['bullets'] as num?)?.toInt() ?? 1,
+        respin: j['respin'] == true,
+        turnSeconds: (j['turn'] as num?)?.toInt() ?? 0,
+      );
+
+  /// Probabilité de mourir au prochain tir après [shots] tirs ratés.
+  double risk(int shots) {
+    if (respin) return bullets / revolverChambers;
+    final left = revolverChambers - shots;
+    return left <= 0 ? 1 : (bullets / left).clamp(0, 1).toDouble();
+  }
+}
+
 class Seat {
   final String id;
   String name;
@@ -24,8 +71,11 @@ class Seat {
   bool alive = true;
   List<GameCard> hand = [];
 
-  /// Chambre (0..5) qui contient la balle.
-  int bulletChamber = 0;
+  /// Chambres (0..5) qui contiennent une balle.
+  Set<int> bulletChambers = {0};
+
+  /// Personnage 3D choisi (0..skinCount-1).
+  int skin;
 
   /// Nombre de fois où le joueur a appuyé sur la détente.
   int shotsFired = 0;
@@ -35,6 +85,7 @@ class Seat {
     required this.name,
     this.isBot = false,
     this.connected = true,
+    this.skin = 0,
   });
 }
 
@@ -76,6 +127,7 @@ class GameEngine {
   bool? lastShotDied;
   String? winnerId;
   Map<Rank, int> composition = deckComposition(2);
+  GameSettings settings = const GameSettings();
 
   /// Incrémenté à chaque modification : permet aux clients d'ignorer les
   /// états obsolètes et à l'UI de détecter les nouveaux événements.
@@ -124,12 +176,38 @@ class GameEngine {
 
   // ------------------------------------------------------------------ lobby
 
-  void addPlayer(String id, String name, {bool isBot = false}) {
+  void addPlayer(String id, String name, {bool isBot = false, int? skin}) {
     if (phase != Phase.lobby) throw GameError('La partie a déjà commencé');
     if (seats.length >= maxPlayers) throw GameError('La table est pleine');
     if (seatOrNull(id) != null) throw GameError('Joueur déjà présent');
-    seats.add(Seat(id: id, name: name, isBot: isBot));
+    seats.add(Seat(id: id, name: name, isBot: isBot, skin: skin ?? _freeSkin(random: isBot)));
     _log('$name rejoint la table');
+    _touch();
+  }
+
+  int _freeSkin({bool random = false}) {
+    final used = seats.map((s) => s.skin).toSet();
+    final free = [for (var i = 0; i < skinCount; i++) if (!used.contains(i)) i];
+    if (free.isEmpty) return seats.length % skinCount;
+    return random ? free[_rng.nextInt(free.length)] : free.first;
+  }
+
+  /// Choix du personnage (dans le salon uniquement).
+  void setSkin(String id, int skin) {
+    if (phase != Phase.lobby) throw GameError('La partie a déjà commencé');
+    if (skin < 0 || skin >= skinCount) throw GameError('Personnage inconnu');
+    seat(id).skin = skin;
+    _touch();
+  }
+
+  void updateSettings(GameSettings s) {
+    if (phase != Phase.lobby && phase != Phase.gameOver) {
+      throw GameError('Partie en cours');
+    }
+    if (![0, 2, 4].contains(s.jokers) || s.bullets < 1 || s.bullets > 2 || s.turnSeconds < 0) {
+      throw GameError('Réglage invalide');
+    }
+    settings = s;
     _touch();
   }
 
@@ -161,12 +239,13 @@ class GameEngine {
     if (seats.length < minPlayers) {
       throw GameError('Il faut au moins $minPlayers joueurs');
     }
-    composition = deckComposition(seats.length);
+    composition = deckComposition(seats.length, jokers: settings.jokers);
     for (final s in seats) {
       s.alive = true;
       s.hand = [];
       s.shotsFired = 0;
-      s.bulletChamber = _rng.nextInt(revolverChambers);
+      final chambers = List.generate(revolverChambers, (i) => i)..shuffle(_rng);
+      s.bulletChambers = chambers.take(settings.bullets).toSet();
     }
     round = 0;
     winnerId = null;
@@ -305,14 +384,18 @@ class GameEngine {
     if (shooterId != playerId) throw GameError('Ce n\'est pas à toi de tirer');
     if (lastShotDied != null) throw GameError('Déjà tiré');
     final s = seat(playerId);
-    final died = s.shotsFired == s.bulletChamber;
+    final died = settings.respin
+        ? _rng.nextInt(revolverChambers) < settings.bullets
+        : s.bulletChambers.contains(s.shotsFired);
     s.shotsFired++;
     lastShotDied = died;
     if (died) {
       s.alive = false;
       _log('PAN ! ${s.name} est éliminé.');
     } else {
-      _log('Clic… ${s.name} survit (${s.shotsFired}/$revolverChambers).');
+      _log(settings.respin
+          ? 'Clic… ${s.name} survit.'
+          : 'Clic… ${s.name} survit (${s.shotsFired}/$revolverChambers).');
     }
     _touch();
   }
@@ -358,6 +441,7 @@ class GameEngine {
             'alive': s.alive,
             'cards': s.hand.length,
             'shots': s.shotsFired,
+            'skin': s.skin,
           },
       ],
       'hand': me == null ? [] : me.hand.map((c) => c.toJson()).toList(),
@@ -378,6 +462,7 @@ class GameEngine {
       'shot': lastShotDied,
       'winner': winnerId,
       'deck': {for (final e in composition.entries) '${e.key.index}': e.value},
+      'settings': settings.toJson(),
       'log': log.length > 8 ? log.sublist(log.length - 8) : log,
     };
   }

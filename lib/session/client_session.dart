@@ -113,6 +113,8 @@ class ClientSession extends GameSession {
   void callLiar() => _send({'t': 'call'});
   @override
   void shoot() => _send({'t': 'shoot'});
+  @override
+  void chooseSkin(int skin) => _send({'t': 'skin', 'skin': skin});
 
   @override
   Future<void> close() async {

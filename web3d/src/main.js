@@ -133,7 +133,9 @@ function buildSeats(state) {
     let anim = null;
     let char;
     if (assetsReady()) {
-      anim = new AnimatedCharacter(SKINS[ids.indexOf(id) % SKINS.length]);
+      const player = state.players.find((p) => p.id === id);
+      const skin = player && player.skin != null ? player.skin : ids.indexOf(id);
+      anim = new AnimatedCharacter(SKINS[skin % SKINS.length]);
       char = anim.root;
       const chair = createChair();
       chair.scale.setScalar(CHAR_SCALE / 0.62);
@@ -181,7 +183,7 @@ function buildSeats(state) {
       gunPose: 0, nextFidget: performance.now() + 4000 + Math.random() * 8000,
     });
   });
-  seatKey = ids.join('|') + '#' + state.me;
+  seatKey = state.players.map((p) => `${p.id}:${p.skin}`).join('|') + '#' + state.me;
 }
 
 function setStackCount(seat, n) {
@@ -507,7 +509,7 @@ let prev = null;
 
 function update(state) {
   if (state.insets) insets = state.insets;
-  const key = state.players.map((p) => p.id).join('|') + '#' + state.me;
+  const key = state.players.map((p) => `${p.id}:${p.skin}`).join('|') + '#' + state.me;
   const rebuilt = key !== seatKey;
   if (rebuilt) buildSeats(state);
 

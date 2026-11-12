@@ -93,6 +93,35 @@ void main() {
     await host.close();
   });
 
+  test('minuteur : l\'IA joue à la place d\'un joueur trop lent', () async {
+    final host = HostSession(
+      hostName: 'Hôte',
+      online: false,
+      timings: HostTimings.instant,
+      random: Random(3),
+    );
+    host.addBot();
+    host.updateSettings(const GameSettings(turnSeconds: 20)); // 20 ms en test
+    host.startGame();
+    // Personne ne joue pour l'hôte : la partie doit quand même se terminer.
+    await waitFor(() => host.engine.phase == Phase.gameOver,
+        timeout: const Duration(seconds: 30));
+    await host.close();
+  });
+
+  test('un invité choisit son personnage dans le salon', () async {
+    final host = HostSession(hostName: 'Hôte', random: Random(2));
+    await host.startNetwork();
+    final c = ClientSession(host: '127.0.0.1', port: host.port!, name: 'Zoé', cid: 'z');
+    await c.connect();
+    await waitFor(() => host.engine.seats.length == 2);
+    c.chooseSkin(4);
+    await waitFor(() => host.engine.seat('z').skin == 4);
+    await waitFor(() => c.view?.player('z')?.skin == 4);
+    await c.close();
+    await host.close();
+  });
+
   test('une partie déjà lancée refuse les nouveaux venus', () async {
     final host = HostSession(hostName: 'Hôte', random: Random(1));
     await host.startNetwork();

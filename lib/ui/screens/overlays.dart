@@ -7,6 +7,7 @@ import '../../game/view.dart';
 import '../../session/session.dart';
 import '../theme.dart';
 import '../widgets/revolver.dart';
+import '../widgets/turn_countdown.dart';
 
 /// Moment de vérité : le perdant appuie sur la détente.
 class RouletteOverlay extends StatefulWidget {
@@ -97,8 +98,10 @@ class _RouletteOverlayState extends State<RouletteOverlay>
 
     String subtitle;
     if (died == null || !_resultShown) {
-      subtitle = 'Chambre ${shotsShown + 1} sur $revolverChambers — '
-          '1 chance sur ${revolverChambers - shotsShown}';
+      final risk = (v.settings.risk(shotsShown < 0 ? 0 : shotsShown) * 100).round();
+      subtitle = v.settings.respin
+          ? 'Barillet re-tourné — $risk % de risque'
+          : 'Chambre ${shotsShown + 1} sur $revolverChambers — $risk % de risque';
     } else if (died) {
       subtitle = isMe ? 'Tu es éliminé.' : '${shooter?.name} est éliminé.';
     } else {
@@ -174,6 +177,8 @@ class _RouletteOverlayState extends State<RouletteOverlay>
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  TurnCountdown(view: v),
                   const Spacer(),
                   shootButton,
                 ],
@@ -216,7 +221,9 @@ class _RouletteOverlayState extends State<RouletteOverlay>
                 Text(subtitle,
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Palette.muted, fontSize: 15)),
-                const SizedBox(height: 28),
+                const SizedBox(height: 12),
+                TurnCountdown(view: v),
+                const SizedBox(height: 16),
                 shootButton,
               ],
             ),

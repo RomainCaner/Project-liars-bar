@@ -23,12 +23,16 @@ class HostTimings {
   final Duration botMax;
   final Duration botShoot;
 
+  /// Durée d'une « seconde » du minuteur de tour (raccourcie dans les tests).
+  final Duration turnUnit;
+
   const HostTimings({
     this.reveal = const Duration(milliseconds: 3200),
     this.afterShot = const Duration(milliseconds: 3800),
     this.botMin = const Duration(milliseconds: 1100),
     this.botMax = const Duration(milliseconds: 2600),
     this.botShoot = const Duration(milliseconds: 2200),
+    this.turnUnit = const Duration(seconds: 1),
   });
 
   static const instant = HostTimings(
@@ -37,6 +41,7 @@ class HostTimings {
     botMin: Duration.zero,
     botMax: Duration.zero,
     botShoot: Duration.zero,
+    turnUnit: Duration(milliseconds: 1),
   );
 }
 
@@ -144,6 +149,10 @@ class HostSession extends GameSession {
         case 'shoot':
           if (pid == null) return;
           engine.pullTrigger(pid);
+          _changed();
+        case 'skin':
+          if (pid == null) return;
+          engine.setSkin(pid, (m['skin'] as num).toInt());
           _changed();
       }
     } on GameError catch (e) {
@@ -260,6 +269,18 @@ class HostSession extends GameSession {
     }
   }
 
+  void updateSettings(GameSettings s) {
+    try {
+      engine.updateSettings(s);
+      _changed();
+    } on GameError catch (e) {
+      toast(e.message);
+    }
+  }
+
+  @override
+  void chooseSkin(int skin) => _act(() => engine.setSkin(hostId, skin));
+
   void startGame() {
     try {
       engine.startGame();
@@ -295,19 +316,29 @@ class HostSession extends GameSession {
 
   // ------------------------------------------------------------ diffusion
 
+  /// Fin du temps imparti pour l'action en cours (minuteur de tour).
+  DateTime? _deadline;
+
+  Map<String, dynamic> _viewFor(String id) {
+    final v = engine.viewFor(id);
+    final d = _deadline;
+    if (d != null) v['turnLeft'] = d.difference(DateTime.now()).inMilliseconds.clamp(0, 1 << 30);
+    return v;
+  }
+
   void _refresh() {
-    _view = GameView.fromJson(engine.viewFor(hostId));
+    _view = GameView.fromJson(_viewFor(hostId));
   }
 
   void _changed() {
+    _schedule();
     _refresh();
     for (final e in _clients.entries) {
       if (e.value != null) {
-        _send(e.key, {'t': 'state', 'state': engine.viewFor(e.value!)});
+        _send(e.key, {'t': 'state', 'state': _viewFor(e.value!)});
       }
     }
     _updateAnnouncement();
-    _schedule();
     notifyListeners();
   }
 
@@ -324,6 +355,7 @@ class HostSession extends GameSession {
   void _schedule() {
     if (_scheduledFor == engine.version) return;
     _timer?.cancel();
+    _deadline = null;
     _scheduledFor = engine.version;
     final v = engine.version;
     void later(Duration d, void Function() f) {
@@ -338,6 +370,8 @@ class HostSession extends GameSession {
       });
     }
 
+    final secs = engine.settings.turnSeconds;
+    final turnLimit = secs > 0 ? timings.turnUnit * secs : null;
     switch (engine.phase) {
       case Phase.reveal:
         later(timings.reveal, engine.proceedToRoulette);
@@ -348,33 +382,48 @@ class HostSession extends GameSession {
           final shooter = engine.seat(engine.shooterId!);
           if (_automated(shooter)) {
             later(timings.botShoot, () => engine.pullTrigger(shooter.id));
+          } else if (turnLimit != null) {
+            _deadline = DateTime.now().add(turnLimit);
+            later(turnLimit, () => engine.pullTrigger(shooter.id));
           }
         }
       case Phase.playing:
         final cur = engine.currentSeat!;
-        if (!_automated(cur)) return;
+        if (!_automated(cur)) {
+          // Minuteur : passé le délai, l'IA joue à la place du joueur.
+          if (turnLimit != null) {
+            _deadline = DateTime.now().add(turnLimit);
+            later(turnLimit, () {
+              toast('Temps écoulé pour ${cur.name}');
+              _autoAct(cur);
+            });
+          }
+          return;
+        }
         final spread = timings.botMax - timings.botMin;
         final delay = timings.botMin +
             Duration(
                 milliseconds: spread.inMilliseconds <= 0
                     ? 0
                     : _rng.nextInt(spread.inMilliseconds));
-        later(delay, () {
-          final view = GameView.fromJson(engine.viewFor(cur.id));
-          final action = _brainFor(cur.id).decide(view);
-          switch (action) {
-            case BotPlay(:final cardIds):
-              engine.playCards(cur.id, cardIds);
-            case BotCall():
-              engine.callLiar(cur.id);
-            case BotShoot():
-              engine.pullTrigger(cur.id);
-            case null:
-              break;
-          }
-        });
+        later(delay, () => _autoAct(cur));
       case Phase.lobby:
       case Phase.gameOver:
+        break;
+    }
+  }
+
+  void _autoAct(Seat seat) {
+    final view = GameView.fromJson(engine.viewFor(seat.id));
+    final action = _brainFor(seat.id).decide(view);
+    switch (action) {
+      case BotPlay(:final cardIds):
+        engine.playCards(seat.id, cardIds);
+      case BotCall():
+        engine.callLiar(seat.id);
+      case BotShoot():
+        engine.pullTrigger(seat.id);
+      case null:
         break;
     }
   }

@@ -25,12 +25,17 @@ class RulesScreen extends StatelessWidget {
         'avoir des cartes, tu es obligé d\'accuser.'),
     ('Nouvelle manche', 'Après chaque tir, on redistribue les cartes, une '
         'nouvelle carte du tour est tirée et le perdant (s\'il survit) commence.'),
+    ('Variantes', 'Dans le salon, l\'hôte peut changer le nombre de Jokers '
+        '(0, 2 ou 4), mettre 2 balles dans les barillets, choisir un barillet '
+        '« re-tourné » à chaque tir (risque constant de 1 sur 6) et activer un '
+        'minuteur : passé le délai, l\'IA joue à la place du joueur.'),
     ('Jouer en classe', 'Un joueur crée la partie, les autres la rejoignent '
         'depuis le même Wi-Fi. Si le Wi-Fi de l\'école bloque les connexions, '
         'l\'hôte active le partage de connexion et les autres s\'y connectent. '
         'Si la partie n\'apparaît pas, tape l\'adresse IP affichée chez l\'hôte.'),
     ('Crédits', 'Personnages 3D : KayKit Adventurers par Kay Lousberg '
-        '(kaylousberg.com), licence CC0. Moteur 3D : three.js.'),
+        '(kaylousberg.com), licence CC0. Moteur 3D : three.js. '
+        'Sons synthétisés pour le jeu.'),
   ];
 
   @override

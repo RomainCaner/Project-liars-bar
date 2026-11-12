@@ -31,6 +31,28 @@ peu puissants, et s'active automatiquement si la 3D ne peut pas démarrer.
 - Un joueur sans carte est sauté ; le dernier à avoir des cartes doit accuser.
 - Dernier survivant = vainqueur.
 
+## Salon : personnage et règles
+
+<img src="docs/screenshots/2_lobby.png" width="200" align="right">
+
+Chacun choisit son personnage parmi les 5 aventuriers. L'hôte règle la partie :
+
+- **Jokers** : 0, 2 (par défaut) ou 4 ;
+- **Balles** : 1 ou 2 par barillet (mode hardcore) ;
+- **Barillet** : classique (le risque monte à chaque tir) ou re-tourné avant chaque tir (risque
+  constant) ;
+- **Minuteur** : aucun, 20, 30 ou 45 s. Passé le délai, l'IA joue (ou tire) à la place du joueur,
+  avec un compte à rebours et des vibrations sur les dernières secondes.
+
+## Sons
+
+Cartes distribuées et posées, coup sur la table quand on accuse, buzzer ou carillon à la
+révélation, barillet qui tourne, clic ou coup de feu, musique de victoire ou de défaite, et une
+ambiance de bar en fond. Tous les sons sont **synthétisés** par `tool/make_sounds.py` (pas
+d'enregistrement tiers). Bouton pour couper le son en haut de la table.
+
+<br clear="right">
+
 ## Jouer en classe
 
 1. Un joueur appuie sur **Créer une partie** : l'écran du salon affiche son adresse IP.
@@ -143,12 +165,14 @@ coupés en deux (`web3d/src/characters.js`). Pour régénérer les modèles depu
 
 ```bash
 cd web3d && node tools/prepare-models.mjs   # retire armes et clips inutiles, compresse (meshopt)
+cd web3d && node tools/render-portraits.mjs # avatars du salon (assets/portraits/, via Playwright)
+python3 tool/make_sounds.py                 # régénère assets/sounds/
 ```
 
 ## Pistes pour la suite
 
 - Sons (déclic, coup de feu, ambiance de bar), via le paquet `audioplayers`
-- Choix de son personnage dans le salon, expressions faciales
+- Expressions faciales des personnages
 - Minuteur de tour configurable (un bot joue si un joueur est absent)
 - Variantes : nombre de jokers, re-rotation du barillet à chaque manche, mode « dés »
 - Chat rapide / émotes pendant la partie

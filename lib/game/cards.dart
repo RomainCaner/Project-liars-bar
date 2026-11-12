@@ -60,12 +60,16 @@ const minPlayers = 2;
 const maxPlayers = 6;
 const revolverChambers = 6;
 
+/// Nombre de personnages 3D disponibles (voir web3d/src/characters.js).
+const skinCount = 5;
+const skinNames = ['Chevalier', 'Barbare', 'Mage', 'Voleuse', 'Encapuchonnée'];
+
 /// Composition du paquet selon le nombre de joueurs.
 ///
 /// Jusqu'à 4 joueurs : 6 Rois, 6 Dames, 6 As, 2 Jokers (20 cartes).
 /// Au-delà, on ajoute des cartes pour que chacun en reçoive 5.
-Map<Rank, int> deckComposition(int playerCount) {
-  final jokers = playerCount <= 4 ? 2 : 3;
+Map<Rank, int> deckComposition(int playerCount, {int? jokers}) {
+  jokers ??= playerCount <= 4 ? 2 : 3;
   final needed = playerCount * cardsPerHand - jokers;
   var perRank = (needed / 3).ceil();
   if (perRank < 6) perRank = 6;

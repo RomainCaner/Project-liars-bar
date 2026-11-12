@@ -9,6 +9,7 @@ import '../../game/view.dart';
 import '../../session/host_session.dart';
 import '../../session/session.dart';
 import '../prefs.dart';
+import '../sound.dart';
 import '../table3d/game3d_view.dart';
 import '../table3d/scene_view.dart';
 import '../theme.dart';
@@ -63,6 +64,7 @@ class _TableScreenState extends State<TableScreen>
     final v = session.view;
     final p = _prev;
     if (v != null && p != null) {
+      _playSounds(p, v);
       if (p.shotDied == null && v.shotDied != null) {
         // Le son et la vibration arrivent après la rotation du barillet.
         Future.delayed(const Duration(milliseconds: 950), () {
@@ -85,8 +87,31 @@ class _TableScreenState extends State<TableScreen>
     setState(() {});
   }
 
+  void _playSounds(GameView p, GameView v) {
+    if (v.phase == Phase.playing && (p.phase != Phase.playing || v.round != p.round)) {
+      Sound.play(Sfx.deal, volume: 0.8);
+    }
+    if (v.round == p.round && v.pile > p.pile) Sound.play(Sfx.play);
+    if (!p.isMyTurn && v.isMyTurn) Sound.play(Sfx.turn, volume: 0.7);
+    if (p.phase == Phase.playing && v.phase == Phase.reveal) {
+      Sound.play(Sfx.slam);
+      final lie = v.reveal?.wasLie ?? false;
+      Sound.later(const Duration(milliseconds: 1200), lie ? Sfx.lie : Sfx.truth, volume: 0.8);
+    }
+    if (p.shotDied == null && v.shotDied != null) {
+      Sound.play(Sfx.spin);
+      Sound.later(const Duration(milliseconds: 950), v.shotDied! ? Sfx.bang : Sfx.click);
+    }
+    if (p.phase != Phase.gameOver && v.phase == Phase.gameOver) {
+      Sound.later(const Duration(milliseconds: 600), v.winnerId == v.myId ? Sfx.win : Sfx.lose);
+    }
+    if (p.phase == Phase.lobby && v.phase != Phase.lobby) Sound.startAmbience();
+    if (v.phase == Phase.lobby && p.phase != Phase.lobby) Sound.stopAmbience();
+  }
+
   @override
   void dispose() {
+    Sound.stopAmbience();
     session.removeListener(_onSession);
     _toastSub?.cancel();
     _shake.dispose();

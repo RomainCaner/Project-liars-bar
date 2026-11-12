@@ -132,7 +132,7 @@ void main() {
 
     test('le barillet tue exactement à la chambre chargée', () {
       final e = twoPlayers()..startGame();
-      final b = e.seat('b')..bulletChamber = 2;
+      final b = e.seat('b')..bulletChambers = {2};
       for (var shot = 0; shot < 3; shot++) {
         e.phase = Phase.roulette;
         e.shooterId = 'b';
@@ -152,10 +152,65 @@ void main() {
       final hand = (view['hand'] as List).cast<Map>();
       expect(hand.map((c) => c['id']).toSet(),
           e.seat('a').hand.map((c) => c.id).toSet());
-      expect(view.toString().contains('bullet'), isFalse);
+      expect(view.toString().toLowerCase().contains('chamber'), isFalse,
+          reason: 'la position des balles reste secrète');
       final parsed = GameView.fromJson(view);
       expect(parsed.players.length, 2);
       expect(parsed.player('b')!.cardCount, 5);
+    });
+  });
+
+  group('variantes', () {
+    test('nombre de jokers réglable', () {
+      for (final j in [0, 2, 4]) {
+        final e = twoPlayers()
+          ..updateSettings(GameSettings(jokers: j))
+          ..startGame();
+        expect(e.composition[Rank.joker], j);
+      }
+      expect(() => twoPlayers().updateSettings(const GameSettings(jokers: 3)),
+          throwsA(isA<GameError>()));
+    });
+
+    test('deux balles par barillet', () {
+      final e = twoPlayers()
+        ..updateSettings(const GameSettings(bullets: 2))
+        ..startGame();
+      for (final s in e.seats) {
+        expect(s.bulletChambers.length, 2);
+      }
+      expect(e.settings.risk(0), closeTo(2 / 6, 1e-9));
+      expect(e.settings.risk(4), 1);
+    });
+
+    test('barillet re-tourné : risque constant et mort aléatoire', () {
+      const s = GameSettings(respin: true);
+      expect(s.risk(0), s.risk(5));
+      var deaths = 0;
+      for (var seed = 0; seed < 600; seed++) {
+        final e = twoPlayers(seed: seed)
+          ..updateSettings(s)
+          ..startGame();
+        e.phase = Phase.roulette;
+        e.shooterId = 'a';
+        e.lastShotDied = null;
+        e.pullTrigger('a');
+        if (e.lastShotDied!) deaths++;
+      }
+      expect(deaths, inInclusiveRange(60, 140), reason: '≈ 1 sur 6');
+    });
+
+    test('personnages : attribués sans doublon puis modifiables au salon', () {
+      final e = GameEngine(random: Random(1));
+      for (var i = 0; i < 5; i++) {
+        e.addPlayer('p$i', 'P$i');
+      }
+      expect(e.seats.map((s) => s.skin).toSet().length, 5);
+      e.setSkin('p0', 3);
+      expect(e.seat('p0').skin, 3);
+      expect((e.viewFor('p1')['players'] as List).first['skin'], 3);
+      e.startGame();
+      expect(() => e.setSkin('p0', 1), throwsA(isA<GameError>()));
     });
   });
 

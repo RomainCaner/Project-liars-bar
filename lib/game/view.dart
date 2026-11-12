@@ -2,7 +2,7 @@
 library;
 
 import 'cards.dart';
-import 'engine.dart' show Phase;
+import 'engine.dart' show GameSettings, Phase;
 
 class PlayerView {
   final String id;
@@ -12,6 +12,7 @@ class PlayerView {
   final bool alive;
   final int cardCount;
   final int shots;
+  final int skin;
 
   PlayerView.fromJson(Map<String, dynamic> j)
       : id = j['id'] as String,
@@ -20,7 +21,8 @@ class PlayerView {
         connected = j['conn'] as bool,
         alive = j['alive'] as bool,
         cardCount = j['cards'] as int,
-        shots = j['shots'] as int;
+        shots = j['shots'] as int,
+        skin = (j['skin'] as num?)?.toInt() ?? 0;
 }
 
 class RevealView {
@@ -61,6 +63,11 @@ class GameView {
   final String? winnerId;
   final Map<Rank, int> deck;
   final List<String> log;
+  final GameSettings settings;
+
+  /// Temps restant pour l'action en cours (minuteur de tour), à réception.
+  final int? turnLeftMs;
+  final DateTime receivedAt;
 
   GameView.fromJson(Map<String, dynamic> j)
       : raw = j,
@@ -92,7 +99,22 @@ class GameView {
           for (final e in (j['deck'] as Map).entries)
             Rank.values[int.parse(e.key as String)]: e.value as int,
         },
-        log = [for (final l in j['log'] as List) l as String];
+        log = [for (final l in j['log'] as List) l as String],
+        settings = GameSettings.fromJson(
+            ((j['settings'] as Map?) ?? const {}).cast<String, dynamic>()),
+        turnLeftMs = (j['turnLeft'] as num?)?.toInt(),
+        receivedAt = DateTime.now();
+
+  /// Secondes restantes au minuteur, ou null s'il n'y en a pas.
+  int? get secondsLeft {
+    final ms = turnLeftMs;
+    if (ms == null) return null;
+    final left = ms - DateTime.now().difference(receivedAt).inMilliseconds;
+    return (left / 1000).ceil().clamp(0, 999);
+  }
+
+  /// Risque de mourir au prochain tir pour ce joueur.
+  double riskFor(PlayerView p) => settings.risk(p.shots);
 
   PlayerView? player(String? id) {
     if (id == null) return null;

@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../session/host_session.dart';
 import '../prefs.dart';
+import '../sound.dart';
 import '../theme.dart';
 import '../widgets/playing_card.dart';
 import '../../game/cards.dart';
@@ -28,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted && _name.text.isEmpty) _name.text = n;
     });
     loadSettings().then((_) {
+      Sound.setOn(soundOn);
       if (mounted) setState(() {});
     });
   }

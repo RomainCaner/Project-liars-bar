@@ -6,6 +6,8 @@ import '../../net/protocol.dart';
 import '../../session/host_session.dart';
 import '../../session/session.dart';
 import '../theme.dart';
+import '../widgets/portrait.dart';
+import '../widgets/settings_panel.dart';
 
 class LobbyView extends StatefulWidget {
   final GameSession session;
@@ -98,6 +100,20 @@ class _LobbyViewState extends State<LobbyView> {
                 const Text('Mode entraînement : ajoute ou retire des bots puis lance.',
                     style: TextStyle(color: Palette.muted)),
               const SizedBox(height: 20),
+              const _SectionTitle('Ton personnage'),
+              const SizedBox(height: 8),
+              SkinPicker(
+                selected: v.me?.skin ?? 0,
+                onSelect: widget.session.chooseSkin,
+              ),
+              const SizedBox(height: 20),
+              const _SectionTitle('Règles de la partie'),
+              const SizedBox(height: 8),
+              SettingsPanel(
+                settings: v.settings,
+                onChanged: h?.updateSettings,
+              ),
+              const SizedBox(height: 20),
               Text('Joueurs (${v.players.length}/$maxPlayers)',
                   style: const TextStyle(
                       color: Palette.gold, fontWeight: FontWeight.w800, fontSize: 16)),
@@ -107,21 +123,11 @@ class _LobbyViewState extends State<LobbyView> {
                   color: Colors.black26,
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading: Icon(
-                      p.id == HostSession.hostId
-                          ? Icons.star
-                          : p.isBot
-                              ? Icons.smart_toy
-                              : Icons.person,
-                      color: p.id == HostSession.hostId ? Palette.gold : Palette.muted,
-                    ),
+                    leading: Portrait(skin: p.skin, size: 44),
                     title: Text(p.id == v.myId ? '${p.name} (toi)' : p.name,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(p.id == HostSession.hostId
-                        ? 'Hôte'
-                        : p.isBot
-                            ? 'Bot'
-                            : 'Joueur'),
+                    subtitle: Text('${p.id == HostSession.hostId ? 'Hôte' : p.isBot ? 'Bot' : 'Joueur'}'
+                        ' · ${skinNames[p.skin % skinNames.length]}'),
                     trailing: h != null && p.id != HostSession.hostId
                         ? IconButton(
                             icon: const Icon(Icons.close),
@@ -169,4 +175,13 @@ class _LobbyViewState extends State<LobbyView> {
       ],
     );
   }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(text,
+      style: const TextStyle(color: Palette.gold, fontWeight: FontWeight.w800, fontSize: 16));
 }

@@ -28,6 +28,9 @@ abstract class GameSession extends ChangeNotifier {
   void play(List<int> cardIds);
   void callLiar();
   void shoot();
+
+  /// Choix de son personnage dans le salon.
+  void chooseSkin(int skin);
   Future<void> close();
 
   bool _disposed = false;

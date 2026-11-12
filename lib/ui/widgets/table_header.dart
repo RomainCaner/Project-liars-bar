@@ -3,7 +3,10 @@ import 'package:material_ui/material_ui.dart';
 import '../../game/cards.dart';
 import '../../game/view.dart';
 import '../theme.dart';
+import '../prefs.dart';
+import '../sound.dart';
 import 'playing_card.dart';
+import 'turn_countdown.dart';
 
 /// Bandeau du haut : quitter, numéro de manche, carte du tour.
 class TableHeader extends StatelessWidget {
@@ -22,7 +25,10 @@ class TableHeader extends StatelessWidget {
           IconButton(onPressed: onLeave, icon: const Icon(Icons.close)),
           Text('Manche ${v.round}',
               style: const TextStyle(color: Palette.muted, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 6),
+          TurnCountdown(view: v),
           const Spacer(),
+          const SoundToggle(),
           if (rank != null)
             Container(
               padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
@@ -55,6 +61,29 @@ class TableHeader extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Bouton pour couper / remettre le son.
+class SoundToggle extends StatefulWidget {
+  const SoundToggle({super.key});
+
+  @override
+  State<SoundToggle> createState() => _SoundToggleState();
+}
+
+class _SoundToggleState extends State<SoundToggle> {
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: soundOn ? 'Couper le son' : 'Activer le son',
+      icon: Icon(soundOn ? Icons.volume_up : Icons.volume_off, color: Palette.muted),
+      onPressed: () {
+        setState(() => soundOn = !soundOn);
+        Sound.setOn(soundOn);
+        saveSettings();
+      },
     );
   }
 }

@@ -254,7 +254,7 @@ class _GameTableViewState extends State<GameTableView> {
               if (me != null) ShotDots(shots: me.shots, size: 9, dead: !alive),
               const Spacer(),
               if (me != null && alive)
-                Text('Risque : 1/${revolverChambers - me.shots}',
+                Text('Risque : ${(v.riskFor(me) * 100).round()} %',
                     style: const TextStyle(color: Palette.muted, fontSize: 12)),
             ],
           ),

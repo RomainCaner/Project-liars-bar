@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../game/view.dart';
 import '../theme.dart';
+import 'portrait.dart';
 import 'revolver.dart';
 
 class PlayerBadge extends StatelessWidget {
@@ -48,17 +49,7 @@ class PlayerBadge extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: _avatarColor(p.name),
-                  child: dead
-                      ? const Icon(Icons.close, color: Colors.white70)
-                      : Text(
-                          p.name.characters.first.toUpperCase(),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w900, color: Colors.white),
-                        ),
-                ),
+                Portrait(skin: p.skin, size: 40, dimmed: dead),
                 if (p.isBot || !p.connected)
                   Positioned(
                     right: -6,
@@ -104,11 +95,4 @@ class PlayerBadge extends StatelessWidget {
     );
   }
 
-  static Color _avatarColor(String name) {
-    const colors = [
-      Color(0xFF8E3B2F), Color(0xFF2F5D8E), Color(0xFF6B8E2F), Color(0xFF8E6B2F),
-      Color(0xFF5E2F8E), Color(0xFF2F8E7A), Color(0xFF8E2F63), Color(0xFF4A4A4A),
-    ];
-    return colors[name.hashCode.abs() % colors.length];
-  }
 }
