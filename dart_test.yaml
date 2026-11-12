@@ -1,0 +1,3 @@
+tags:
+  screenshots:
+    skip: "Captures d'écran : flutter test --tags screenshots --run-skipped --update-goldens"

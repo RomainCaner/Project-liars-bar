@@ -1,0 +1,88 @@
+name: Build APK
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Version Unity : logique testée et scripts compilés contre les assemblages de référence d'Unity.
+  unity-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Tests de la logique (C#)
+        run: dotnet run --project "unity/Checks~/Logic"
+      - name: Scripts du jeu (UnityEngine)
+        run: dotnet build "unity/Checks~/Engine" -warnaserror:CS0103,CS0117,CS1061
+      - name: Scripts d'éditeur (UnityEditor)
+        run: dotnet build "unity/Checks~/Editor"
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Scène 3D (three.js)
+        working-directory: web3d
+        run: |
+          npm ci
+          npm run build
+          git diff --exit-code ../assets/table3d.html || (echo "assets/table3d.html n'est pas à jour : lance 'npm run build' dans web3d/" && exit 1)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+          cache: true
+
+      - name: Dépendances
+        run: flutter pub get
+
+      - name: Analyse statique
+        run: flutter analyze
+
+      - name: Tests
+        run: flutter test
+
+      - name: Compilation de l'APK
+        run: flutter build apk --release
+
+      - name: Renommage
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
+          cp build/app/outputs/flutter-apk/app-release.apk "menteur-${VERSION}.apk"
+          echo "APK_NAME=menteur-${VERSION}.apk" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: menteur-apk
+          path: ${{ env.APK_NAME }}
+
+      # Pousser un tag (ex. v1.0.0) publie une Release avec l'APK téléchargeable
+      # sans compte GitHub : pratique pour partager le lien aux copains.
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APK_NAME }}
+          generate_release_notes: true
