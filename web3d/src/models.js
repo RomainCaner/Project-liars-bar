@@ -251,6 +251,26 @@ export function buildLamp(scene) {
 
 // -------------------------------------------------------------- personnages
 
+let chairMat;
+export function createChair() {
+  chairMat ??= new THREE.MeshStandardMaterial({ map: woodTexture('#4a2c18', '#2a170c'), roughness: 0.7 });
+  const g = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.45), chairMat);
+  seat.position.set(0, 0.47, -0.05);
+  seat.castShadow = true;
+  g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.05), chairMat);
+  back.position.set(0, 0.8, -0.28);
+  back.castShadow = true;
+  g.add(back);
+  for (const [x, z] of [[-0.21, -0.25], [0.21, -0.25], [-0.21, 0.15], [0.21, 0.15]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.47, 0.04), chairMat);
+    leg.position.set(x, 0.235, z);
+    g.add(leg);
+  }
+  return g;
+}
+
 const SKIN = [0xe0b48f, 0xc68c62, 0x9a6440, 0xf0cba8, 0x7a4a2c, 0xd9a47a];
 const COATS = [0x6b1f1f, 0x1f3f6b, 0x3b5a2a, 0x5a3a6b, 0x6b5a1f, 0x2a5a5a, 0x4a4a4a, 0x7a3a10];
 
@@ -271,22 +291,7 @@ export function createCharacter(id) {
   const dark = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.9 });
 
   const root = new THREE.Group();
-
-  // Chaise
-  const chairMat = new THREE.MeshStandardMaterial({ map: woodTexture('#4a2c18', '#2a170c'), roughness: 0.7 });
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.45), chairMat);
-  seat.position.set(0, 0.47, -0.05);
-  seat.castShadow = true;
-  root.add(seat);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.05), chairMat);
-  back.position.set(0, 0.8, -0.28);
-  back.castShadow = true;
-  root.add(back);
-  for (const [x, z] of [[-0.21, -0.25], [0.21, -0.25], [-0.21, 0.15], [0.21, 0.15]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.47, 0.04), chairMat);
-    leg.position.set(x, 0.235, z);
-    root.add(leg);
-  }
+  root.add(createChair());
 
   const torso = new THREE.Group();
   torso.position.set(0, 0.5, -0.05);

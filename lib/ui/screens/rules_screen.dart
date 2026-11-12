@@ -29,6 +29,8 @@ class RulesScreen extends StatelessWidget {
         'depuis le même Wi-Fi. Si le Wi-Fi de l\'école bloque les connexions, '
         'l\'hôte active le partage de connexion et les autres s\'y connectent. '
         'Si la partie n\'apparaît pas, tape l\'adresse IP affichée chez l\'hôte.'),
+    ('Crédits', 'Personnages 3D : KayKit Adventurers par Kay Lousberg '
+        '(kaylousberg.com), licence CC0. Moteur 3D : three.js.'),
   ];
 
   @override

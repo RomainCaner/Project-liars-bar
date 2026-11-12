@@ -4,9 +4,10 @@
 import * as THREE from 'three';
 import {
   CARD_H, CARD_W, TABLE_L, TABLE_Y, buildLamp, buildRoom, buildTable,
-  createCard, createCharacter, createRevolver, setCardRank,
+  createCard, createChair, createCharacter, createRevolver, setCardRank,
 } from './models.js';
 import { createLabelCanvas, drawLabel } from './textures.js';
+import { AnimatedCharacter, HEAD_UP, SKINS, assetsReady, loadCharacters } from './characters.js';
 
 const PHASE = { lobby: 0, playing: 1, reveal: 2, roulette: 3, gameOver: 4 };
 
@@ -41,17 +42,25 @@ const lamp = buildLamp(scene);
 
 // ------------------------------------------------------------ disposition
 
+// Calage des personnages KayKit sur leur chaise.
+const CHAR_SCALE = 0.62;
+const CHAR_Y = 0.0;
+const CHAR_Z = 0.0;
+const HAND_CARD_SCALE = 0.85;
+// Dos des cartes vers la table, légèrement inclinées vers l'arrière.
+const FAN_TILT = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.35, Math.PI, 0));
+
 const PILE = new THREE.Vector3(0, TABLE_Y + 0.03, -0.15);
 const GUN_REST = new THREE.Vector3(0.3, TABLE_Y + 0.055, 0.6);
 const ME_ORIGIN = new THREE.Vector3(0, TABLE_Y + 0.3, TABLE_L / 2 + 0.3);
 
 // Places autour de la table (sans compter la mienne, au bout côté caméra).
 const SLOTS = {
-  leftNear: { pos: [-0.95, 0.45], face: [0, 0.45] },
-  leftFar: { pos: [-0.95, -0.7], face: [0, -0.7] },
-  far: { pos: [0, -2.05], face: [0, 0] },
-  rightFar: { pos: [0.95, -0.7], face: [0, -0.7] },
-  rightNear: { pos: [0.95, 0.45], face: [0, 0.45] },
+  leftNear: { pos: [-0.86, 0.2], face: [0, 0.2] },
+  leftFar: { pos: [-0.86, -0.95], face: [0, -0.95] },
+  far: { pos: [0, -1.98], face: [0, 0] },
+  rightFar: { pos: [0.86, -0.95], face: [0, -0.95] },
+  rightNear: { pos: [0.86, 0.2], face: [0, 0.2] },
 };
 const SLOT_ORDER = {
   1: ['far'],
@@ -106,7 +115,7 @@ let seatKey = '';
 
 function clearSeats() {
   for (const s of seats.values()) {
-    scene.remove(s.char, s.label.sprite, s.stack, s.ring);
+    scene.remove(s.char, s.label.sprite, s.stack, s.ring, s.hand);
   }
   seats.clear();
 }
@@ -120,7 +129,20 @@ function buildSeats(state) {
   others.forEach((id, i) => {
     const slot = SLOTS[order[i]];
     if (!slot) return;
-    const char = createCharacter(id);
+    // Même apparence pour un joueur donné sur tous les téléphones.
+    let anim = null;
+    let char;
+    if (assetsReady()) {
+      anim = new AnimatedCharacter(SKINS[ids.indexOf(id) % SKINS.length]);
+      char = anim.root;
+      const chair = createChair();
+      chair.scale.setScalar(CHAR_SCALE / 0.62);
+      char.add(chair);
+      anim.model.scale.setScalar(CHAR_SCALE);
+      anim.model.position.set(0, CHAR_Y, CHAR_Z);
+    } else {
+      char = createCharacter(id);
+    }
     char.position.set(slot.pos[0], 0, slot.pos[1]);
     char.lookAt(slot.face[0], 0, slot.face[1]);
     scene.add(char);
@@ -152,12 +174,21 @@ function buildSeats(state) {
     ring.position.copy(stackPos).setY(TABLE_Y + 0.026);
     scene.add(ring);
 
-    seats.set(id, { id, char, label, stack, ring, toward, lastLabel: '', slumped: false });
+    const hand = new THREE.Group();
+    if (anim) scene.add(hand);
+    seats.set(id, {
+      id, char, anim, hand, label, stack, ring, toward, lastLabel: '', slumped: false,
+      gunPose: 0, nextFidget: performance.now() + 4000 + Math.random() * 8000,
+    });
   });
   seatKey = ids.join('|') + '#' + state.me;
 }
 
 function setStackCount(seat, n) {
+  if (seat.anim) {
+    setHandCount(seat, n);
+    return;
+  }
   const stack = seat.stack;
   while (stack.children.length > n) stack.remove(stack.children[stack.children.length - 1]);
   while (stack.children.length < n) {
@@ -170,13 +201,55 @@ function setStackCount(seat, n) {
   }
 }
 
+/** Cartes tenues en éventail dans la main gauche. */
+function setHandCount(seat, n) {
+  const hand = seat.hand;
+  if (hand.children.length === n) return;
+  while (hand.children.length) hand.remove(hand.children[0]);
+  for (let i = 0; i < n; i++) {
+    const c = createCard(null);
+    const a = (i - (n - 1) / 2) * 0.28;
+    c.scale.setScalar(HAND_CARD_SCALE);
+    c.position.set(Math.sin(a) * 0.06, 0.07 + Math.cos(a) * 0.04, -0.03 - 0.003 * i);
+    c.rotation.set(0, 0, -a);
+    hand.add(c);
+  }
+}
+
+/** L'éventail suit la main gauche, cartes tournées vers leur propriétaire. */
+function placeHandFan(seat) {
+  const hand = seat.hand;
+  hand.visible = seat.anim.cardHold > 0.6;
+  if (!hand.visible) return;
+  seat.anim.handL.getWorldPosition(hand.position);
+  seat.char.getWorldQuaternion(hand.quaternion);
+  hand.quaternion.multiply(FAN_TILT);
+}
+
 function headWorld(seat) {
+  if (seat.anim) return seat.anim.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, HEAD_UP, 0));
   return seat.char.userData.head.getWorldPosition(new THREE.Vector3());
+}
+
+function handWorld(seat) {
+  if (seat.anim) return seat.anim.handR.getWorldPosition(new THREE.Vector3());
+  return seat.stack.position.clone();
+}
+
+function gesture(id, name, opts) {
+  const seat = seats.get(id);
+  if (seat && seat.anim) seat.anim.gesture(name, opts);
 }
 
 function slump(seat, animate) {
   if (seat.slumped) return;
   seat.slumped = true;
+  if (seat.anim) {
+    seat.anim.die();
+    if (!animate) seat.anim.slump = 1;
+    setHandCount(seat, 0);
+    return;
+  }
   const { torso, head, coatMat, skinMat } = seat.char.userData;
   const side = Math.random() < 0.5 ? -1 : 1;
   const apply = (t) => {
@@ -244,7 +317,27 @@ gun.quaternion.copy(GUN_REST_Q);
 scene.add(gun);
 let gunHolder = null; // id du tireur
 
+let gunFollow = null; // siège dont la main tient le revolver
+
+function gunToHand(seat) {
+  const head = headWorld(seat);
+  const pos = handWorld(seat);
+  const m = new THREE.Matrix4().lookAt(head, pos, new THREE.Vector3(0, 1, 0));
+  return { pos, quat: new THREE.Quaternion().setFromRotationMatrix(m) };
+}
+
 function raiseGun(seat) {
+  if (seat.anim) {
+    seat.anim.gesture('1H_Ranged_Aiming', { hold: true, fade: 0.3 });
+    tween(0.9, (t) => { seat.gunPose = t; });
+    const p0 = gun.position.clone();
+    const q0 = gun.quaternion.clone();
+    return tween(0.9, (t) => {
+      const { pos, quat } = gunToHand(seat);
+      gun.position.lerpVectors(p0, pos, t);
+      gun.quaternion.slerpQuaternions(q0, quat, t);
+    }).then(() => { if (gunHolder === seat.id) gunFollow = seat; });
+  }
   const head = headWorld(seat);
   const right = new THREE.Vector3(-seat.toward.z, 0, seat.toward.x); // côté du joueur
   const pos = head.clone().addScaledVector(right, 0.24).add(new THREE.Vector3(0, 0.02, 0));
@@ -269,6 +362,12 @@ function scaleGun(to) {
 }
 
 function lowerGun() {
+  if (gunFollow && !gunFollow.slumped) {
+    const seat = gunFollow;
+    tween(0.6, (t) => { seat.gunPose = 1 - t; });
+    seat.anim.toIdle(0.4);
+  }
+  gunFollow = null;
   gunHolder = null;
   scaleGun(1.6);
   return moveTo(gun, GUN_REST, GUN_REST_Q, 0.8);
@@ -296,11 +395,31 @@ async function fire(died, shooterIsMe, seat) {
   hammer.rotation.x = 0.3;
   setTimeout(() => { hammer.rotation.x = -0.4; }, 150);
   if (!died) {
-    if (seat) {
+    if (seat && seat.anim) {
+      // Soulagement : il repose l'arme et lève les bras.
+      setTimeout(() => {
+        lowerGun();
+        seat.anim.gesture('Cheer', { speed: 1.2 });
+      }, 500);
+    } else if (seat) {
       const { head } = seat.char.userData;
       tween(0.5, (t) => { head.rotation.x = -Math.sin(t * Math.PI) * 0.2; });
     }
     return;
+  }
+  // Tout le monde sursaute.
+  for (const other of seats.values()) {
+    if (other !== seat && !other.slumped) other.anim?.gesture(Math.random() < 0.5 ? 'Hit_A' : 'Hit_B', { speed: 1.3 });
+  }
+  if (seat && seat.anim) {
+    gunFollow = null;
+    gunHolder = null;
+    const g0 = gun.position.clone();
+    // Le revolver tombe sur la table.
+    tween(0.5, (t) => {
+      gun.position.lerpVectors(g0, GUN_REST, t);
+      gun.quaternion.slerp(GUN_REST_Q, t);
+    }, { delay: 0.15 });
   }
   tween(0.35, (t) => {
     flash.intensity = 25 * (1 - t);
@@ -431,7 +550,12 @@ function update(state) {
       flyToPile(camera.localToWorld(new THREE.Vector3(0, -0.15, -0.6)), n);
     } else {
       const seat = seats.get(state.lastPlayBy);
-      flyToPile(seat ? seat.stack.position.clone() : ME_ORIGIN, n);
+      if (seat && seat.anim) {
+        seat.anim.gesture('Throw', { speed: 1.4 });
+        setTimeout(() => flyToPile(handWorld(seat), n), 380);
+      } else {
+        flyToPile(seat ? seat.stack.position.clone() : ME_ORIGIN, n);
+      }
     }
   }
   if (rebuilt || (newRound && state.pile > 0)) {
@@ -447,6 +571,10 @@ function update(state) {
   // Révélation.
   const revealNow = state.reveal && (state.phase === PHASE.reveal || state.phase === PHASE.roulette);
   if (revealNow && !(prev && prev.reveal && prev.round === state.round)) {
+    const r = state.reveal;
+    gesture(r.accuser, 'Unarmed_Melee_Attack_Punch_A', { speed: 1.1 });
+    gesture(r.accused, 'Block', { speed: 1.2 });
+    setTimeout(() => gesture(r.accused, r.lie ? 'Hit_B' : 'Cheer'), 1500);
     const cards = state.reveal.cards;
     const taken = pileCards.slice(-cards.length);
     taken.forEach((card, i) => {
@@ -468,6 +596,10 @@ function update(state) {
     fire(state.shot, state.shooter === state.me, seats.get(state.shooter));
   }
   if (state.phase === PHASE.gameOver && gunHolder) lowerGun();
+  if (state.phase === PHASE.gameOver && prev && prev.phase !== PHASE.gameOver) {
+    const w = seats.get(state.winner);
+    if (w && w.anim) w.anim.loop('Cheer');
+  }
 
   syncHand(state, newRound && !rebuilt && !!prev);
   prev = state;
@@ -536,9 +668,27 @@ function frame(now) {
   if (curSeat) lookTarget.copy(headWorld(curSeat));
   else if (cur && prev && cur === prev.me) lookTarget.copy(camera.position);
   else lookTarget.copy(PILE);
+  const dt = Math.min(0.05, (now - (frame.last || now)) / 1000);
+  frame.last = now;
   for (const seat of seats.values()) {
-    const { torso, head, phase } = seat.char.userData;
     seat.ring.material.opacity = seat.isCurrent ? 0.55 + Math.sin(t * 5) * 0.35 : 0;
+    if (seat.anim) {
+      let yaw = 0;
+      if (seat !== curSeat) {
+        const local = seat.char.worldToLocal(lookTarget.clone());
+        yaw = THREE.MathUtils.clamp(Math.atan2(local.x, local.z), -1.0, 1.0);
+      }
+      // Petits gestes d'attente de temps en temps.
+      if (!seat.slumped && now > seat.nextFidget && prev && prev.phase === PHASE.playing
+          && seat.anim.current === seat.anim.sitUpper) {
+        seat.anim.gesture(Math.random() < 0.5 ? 'Interact' : 'Use_Item', { speed: 0.8 });
+        seat.nextFidget = now + 7000 + Math.random() * 9000;
+      }
+      seat.anim.update(dt, { lookYaw: yaw, gunPose: seat.gunPose, cards: seat.hand.children.length > 0 });
+      placeHandFan(seat);
+      continue;
+    }
+    const { torso, head, phase } = seat.char.userData;
     if (seat.slumped) continue;
     torso.scale.y = 1 + Math.sin(t * 1.6 + phase) * 0.012;
     if (seat === curSeat) {
@@ -550,10 +700,27 @@ function frame(now) {
     head.rotation.y += (yaw - head.rotation.y) * 0.06;
   }
 
-  // Les cartes de la main se soulèvent légèrement à mon tour.
+  if (gunFollow) {
+    const { pos, quat } = gunToHand(gunFollow);
+    gun.position.copy(pos);
+    gun.quaternion.copy(quat);
+  }
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
 
-window.table3d = { update, resize };
+// Chargement des personnages : en attendant (ou en cas d'échec), les
+// personnages simplifiés s'affichent.
+loadCharacters()
+  .then(() => {
+    seatKey = '';
+    if (prev) {
+      const last = prev;
+      prev = null;
+      update(last);
+    }
+  })
+  .catch((e) => console.log('personnages indisponibles', e));
+
+window.table3d = { update, resize, debug: { camBase, CAM_TARGET, seats, gun, THREE } };
 send({ t: 'ready' });

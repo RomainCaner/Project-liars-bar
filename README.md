@@ -103,6 +103,8 @@ lib/
   ui/        Écrans Flutter (accueil, rejoindre, salon, table, roulette, fin)
     table3d/       WebView qui affiche la scène 3D + interface par-dessus
 web3d/       Scène 3D three.js (salle, table, personnages, cartes, revolver)
+  src/characters.js personnages KayKit animés (gestes, IK du bras)
+  models/          personnages et animations compressés (CC0)
   src/main.js      synchronisation avec l'état, animations, taps sur les cartes
   src/models.js    modèles low-poly construits en code
   src/textures.js  textures dessinées sur canvas
@@ -117,10 +119,36 @@ L'**hôte fait autorité** : lui seul fait tourner le moteur et envoie à chaque
 Les clients ne reçoivent jamais les cartes des autres ni la position des balles, donc on ne peut pas
 tricher en inspectant le trafic.
 
+## Personnages et animations
+
+Les adversaires sont les personnages du pack **KayKit Adventurers** (chevalier, barbare, mage,
+voleuse, voleuse encapuchonnée) par [Kay Lousberg](https://www.kaylousberg.com), sous licence
+**CC0** (domaine public, voir `web3d/models/LICENSE-KayKit.txt`). Chaque joueur garde la même
+apparence sur tous les téléphones.
+
+Animations utilisées (squelette commun, 13 clips sur les 76 du pack) :
+
+| Moment du jeu | Animation |
+| --- | --- |
+| Attente | assis (`Sit_Chair_Idle`), cartes en éventail dans la main gauche, petits gestes, tête tournée vers le joueur actif |
+| Poser des cartes | lancer (`Throw`), les cartes partent de sa main vers le tas |
+| Crier « Menteur ! » | l'accusateur frappe (`Punch_A`), l'accusé se protège (`Block`) |
+| Révélation | le menteur démasqué encaisse (`Hit_B`), l'innocent se réjouit (`Cheer`) |
+| Roulette | le bras porte le revolver à la tempe (cinématique inverse), puis soulagement (`Cheer`) ou effondrement sur la table |
+| Coup de feu | les autres sursautent (`Hit_A` / `Hit_B`) |
+| Victoire | célébration en boucle |
+
+Le bas du corps reste assis pendant que le haut du corps joue les gestes : les clips sont
+coupés en deux (`web3d/src/characters.js`). Pour régénérer les modèles depuis le pack officiel :
+
+```bash
+cd web3d && node tools/prepare-models.mjs   # retire armes et clips inutiles, compresse (meshopt)
+```
+
 ## Pistes pour la suite
 
 - Sons (déclic, coup de feu, ambiance de bar), via le paquet `audioplayers`
-- Personnages plus détaillés (modèles glTF) et animations de bluff (regards, tics nerveux)
+- Choix de son personnage dans le salon, expressions faciales
 - Minuteur de tour configurable (un bot joue si un joueur est absent)
 - Variantes : nombre de jokers, re-rotation du barillet à chaque manche, mode « dés »
 - Chat rapide / émotes pendant la partie

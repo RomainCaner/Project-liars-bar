@@ -11,6 +11,7 @@ const result = await build({
   target: ['chrome80'],
   write: false,
   legalComments: 'none',
+  loader: { '.glb': 'binary' },
 });
 const js = result.outputFiles[0].text.replace(/<\/script/g, '<\\/script');
 const html = readFileSync('src/index.html', 'utf8').replace('/*__SCRIPT__*/', () => js);
