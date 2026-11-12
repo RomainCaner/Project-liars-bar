@@ -17,6 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Scène 3D (three.js)
+        working-directory: web3d
+        run: |
+          npm ci
+          npm run build
+          git diff --exit-code ../assets/table3d.html || (echo "assets/table3d.html n'est pas à jour : lance 'npm run build' dans web3d/" && exit 1)
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

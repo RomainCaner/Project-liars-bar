@@ -12,7 +12,15 @@ import '../widgets/revolver.dart';
 class RouletteOverlay extends StatefulWidget {
   final GameSession session;
   final GameView view;
-  const RouletteOverlay({super.key, required this.session, required this.view});
+
+  /// En 3D, la scène montre le revolver : on garde seulement textes et bouton.
+  final bool over3d;
+  const RouletteOverlay({
+    super.key,
+    required this.session,
+    required this.view,
+    this.over3d = false,
+  });
 
   @override
   State<RouletteOverlay> createState() => _RouletteOverlayState();
@@ -97,6 +105,86 @@ class _RouletteOverlayState extends State<RouletteOverlay>
       subtitle = isMe ? 'Tu survis… pour l\'instant.' : '${shooter?.name} survit.';
     }
 
+    final titleWidget = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+      child: Text(
+        title,
+        key: ValueKey(title),
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: title == 'PAN !' ? 64 : 26,
+          fontWeight: FontWeight.w900,
+          color: titleColor,
+          letterSpacing: title == 'PAN !' ? 6 : 0.5,
+          shadows: const [Shadow(color: Colors.black, blurRadius: 12)],
+        ),
+      ),
+    );
+    final shootButton = v.iMustShoot
+        ? SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Palette.blood,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(0, 64),
+              ),
+              onPressed: _pressed
+                  ? null
+                  : () {
+                      setState(() => _pressed = true);
+                      widget.session.shoot();
+                    },
+              child: const Text('APPUYER SUR LA DÉTENTE', style: TextStyle(fontSize: 18)),
+            ),
+          )
+        : const SizedBox(height: 64);
+    final flashLayer = IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _flash,
+        builder: (context, _) => Container(
+          color: Palette.blood.withAlpha(
+              ((1 - _flash.value) * 180).round() * (_flash.isAnimating ? 1 : 0)),
+        ),
+      ),
+    );
+
+    if (widget.over3d) {
+      return Stack(
+        children: [
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 70, 20, 20),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        titleWidget,
+                        const SizedBox(height: 4),
+                        Text(subtitle,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Palette.cream, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  shootButton,
+                ],
+              ),
+            ),
+          ),
+          flashLayer,
+        ],
+      );
+    }
+
     return Stack(
       children: [
         Positioned.fill(
@@ -108,21 +196,7 @@ class _RouletteOverlayState extends State<RouletteOverlay>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
-                  child: Text(
-                    title,
-                    key: ValueKey(title),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: title == 'PAN !' ? 64 : 28,
-                      fontWeight: FontWeight.w900,
-                      color: titleColor,
-                      letterSpacing: title == 'PAN !' ? 6 : 0.5,
-                    ),
-                  ),
-                ),
+                titleWidget,
                 const SizedBox(height: 28),
                 AnimatedBuilder(
                   animation: _spin,
@@ -143,40 +217,12 @@ class _RouletteOverlayState extends State<RouletteOverlay>
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Palette.muted, fontSize: 15)),
                 const SizedBox(height: 28),
-                if (v.iMustShoot)
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Palette.blood,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(0, 64),
-                      ),
-                      onPressed: _pressed
-                          ? null
-                          : () {
-                              setState(() => _pressed = true);
-                              widget.session.shoot();
-                            },
-                      child: const Text('APPUYER SUR LA DÉTENTE',
-                          style: TextStyle(fontSize: 18)),
-                    ),
-                  )
-                else
-                  const SizedBox(height: 64),
+                shootButton,
               ],
             ),
           ),
         ),
-        IgnorePointer(
-          child: AnimatedBuilder(
-            animation: _flash,
-            builder: (context, _) => Container(
-              color: Palette.blood.withAlpha(((1 - _flash.value) * 180).round()
-                  * (_flash.isAnimating ? 1 : 0)),
-            ),
-          ),
-        ),
+        flashLayer,
       ],
     );
   }

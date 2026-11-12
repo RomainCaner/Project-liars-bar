@@ -8,6 +8,9 @@ import '../../game/engine.dart' show Phase;
 import '../../game/view.dart';
 import '../../session/host_session.dart';
 import '../../session/session.dart';
+import '../prefs.dart';
+import '../table3d/game3d_view.dart';
+import '../table3d/scene_view.dart';
 import '../theme.dart';
 import 'game_view.dart';
 import 'lobby_view.dart';
@@ -30,6 +33,17 @@ class _TableScreenState extends State<TableScreen>
   );
   StreamSubscription<String>? _toastSub;
   GameView? _prev;
+  bool _fallback2d = false;
+
+  bool get _show3d => use3d && scene3dSupported && !_fallback2d;
+
+  void _on3dFailure() {
+    if (!mounted || _fallback2d) return;
+    setState(() => _fallback2d = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('3D indisponible sur cet appareil : passage en 2D')),
+    );
+  }
 
   GameSession get session => widget.session;
 
@@ -121,9 +135,21 @@ class _TableScreenState extends State<TableScreen>
     } else {
       body = Stack(
         children: [
-          GameTableView(session: session, view: v, onLeave: _leave),
+          if (_show3d)
+            Positioned.fill(
+              child: Game3DView(
+                session: session,
+                view: v,
+                onLeave: _leave,
+                onFailure: _on3dFailure,
+              ),
+            )
+          else
+            GameTableView(session: session, view: v, onLeave: _leave),
           if (v.phase == Phase.roulette)
-            Positioned.fill(child: RouletteOverlay(session: session, view: v)),
+            Positioned.fill(
+              child: RouletteOverlay(session: session, view: v, over3d: _show3d),
+            ),
           if (v.phase == Phase.gameOver)
             Positioned.fill(
               child: GameOverOverlay(

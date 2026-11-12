@@ -1,0 +1,12 @@
+{
+  "name": "menteur-table3d",
+  "private": true,
+  "description": "Scène 3D de la table (three.js), compilée en un seul fichier HTML embarqué dans l'app.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "three": "0.187.0"
+  }
+}

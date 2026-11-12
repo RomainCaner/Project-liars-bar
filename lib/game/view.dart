@@ -41,6 +41,8 @@ class RevealView {
 }
 
 class GameView {
+  /// JSON d'origine (transmis tel quel à la scène 3D).
+  final Map<String, dynamic> raw;
   final int version;
   final Phase phase;
   final int round;
@@ -61,7 +63,8 @@ class GameView {
   final List<String> log;
 
   GameView.fromJson(Map<String, dynamic> j)
-      : version = j['v'] as int,
+      : raw = j,
+        version = j['v'] as int,
         phase = Phase.values[j['phase'] as int],
         round = j['round'] as int,
         tableRank = j['table'] == null ? null : Rank.values[j['table'] as int],

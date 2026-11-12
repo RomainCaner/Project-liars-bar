@@ -1,13 +1,22 @@
 # Menteur !
 
-Jeu de cartes de bluff avec roulette russe, pour jouer entre amis **en réseau local**
+Jeu de cartes de bluff avec roulette russe en **3D**, pour jouer entre amis **en réseau local**
 (même Wi-Fi ou partage de connexion), sur Android. Sans serveur, sans compte, sans Internet.
 
 <p>
-  <img src="docs/screenshots/1_home.png" width="190">
-  <img src="docs/screenshots/3_my_turn.png" width="190">
-  <img src="docs/screenshots/4_reveal.png" width="190">
-  <img src="docs/screenshots/5_roulette.png" width="190">
+  <img src="docs/screenshots/3d_table.png" width="200">
+  <img src="docs/screenshots/3d_reveal.png" width="200">
+  <img src="docs/screenshots/3d_roulette.png" width="200">
+</p>
+
+Une table 2D reste disponible (interrupteur « Table en 3D » sur l'accueil) pour les téléphones
+peu puissants, et s'active automatiquement si la 3D ne peut pas démarrer.
+
+<p>
+  <img src="docs/screenshots/1_home.png" width="150">
+  <img src="docs/screenshots/3_my_turn.png" width="150">
+  <img src="docs/screenshots/4_reveal.png" width="150">
+  <img src="docs/screenshots/5_roulette.png" width="150">
 </p>
 
 ## Règles
@@ -53,7 +62,7 @@ le Play Store, il faudrait une clé privée.
 
 ## Développement
 
-Prérequis : Flutter 3.50 (stable) ; le SDK Android pour compiler l'APK en local.
+Prérequis : Flutter 3.50 (stable), Node 22 pour la scène 3D, le SDK Android pour compiler l'APK en local.
 
 ```bash
 flutter pub get
@@ -61,6 +70,16 @@ flutter test                 # règles, 2000 parties de bots, partie réseau com
 flutter run                  # sur un téléphone branché en USB
 flutter build apk --release  # APK dans build/app/outputs/flutter-apk/
 ```
+
+La scène 3D vit dans `web3d/` (three.js, tout est généré en code : aucun modèle ni image à
+télécharger). Après une modification :
+
+```bash
+cd web3d && npm install && npm run build   # régénère assets/table3d.html (commité)
+```
+
+On peut l'ouvrir directement dans un navigateur et la piloter depuis la console avec
+`table3d.update({...})` (format : `GameEngine.viewFor` dans `lib/game/engine.dart`).
 
 Pour tester le multijoueur sur un seul PC : lancer deux émulateurs, ou un émulateur et un téléphone,
 puis rejoindre par IP.
@@ -82,7 +101,17 @@ lib/
     host_session.dart   moteur + bots + serveur WebSocket (port 4040)
     client_session.dart client WebSocket avec reconnexion automatique
   ui/        Écrans Flutter (accueil, rejoindre, salon, table, roulette, fin)
+    table3d/       WebView qui affiche la scène 3D + interface par-dessus
+web3d/       Scène 3D three.js (salle, table, personnages, cartes, revolver)
+  src/main.js      synchronisation avec l'état, animations, taps sur les cartes
+  src/models.js    modèles low-poly construits en code
+  src/textures.js  textures dessinées sur canvas
+assets/table3d.html  scène compilée en un seul fichier (hors ligne)
 ```
+
+La scène 3D n'est qu'un **affichage** : Flutter lui envoie l'état de la partie
+(`table3d.update(état)`) et elle renvoie les cartes touchées (`{t:'tap', id}`). Les règles et le
+réseau restent côté Dart, donc testés indépendamment du rendu.
 
 L'**hôte fait autorité** : lui seul fait tourner le moteur et envoie à chaque joueur sa propre vue.
 Les clients ne reçoivent jamais les cartes des autres ni la position des balles, donc on ne peut pas
@@ -91,6 +120,7 @@ tricher en inspectant le trafic.
 ## Pistes pour la suite
 
 - Sons (déclic, coup de feu, ambiance de bar), via le paquet `audioplayers`
+- Personnages plus détaillés (modèles glTF) et animations de bluff (regards, tics nerveux)
 - Minuteur de tour configurable (un bot joue si un joueur est absent)
 - Variantes : nombre de jokers, re-rotation du barillet à chaque manche, mode « dés »
 - Chat rapide / émotes pendant la partie

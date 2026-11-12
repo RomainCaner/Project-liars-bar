@@ -5,6 +5,7 @@ import '../prefs.dart';
 import '../theme.dart';
 import '../widgets/playing_card.dart';
 import '../../game/cards.dart';
+import '../table3d/scene_view.dart';
 import 'join_screen.dart';
 import 'rules_screen.dart';
 import 'table_screen.dart';
@@ -25,6 +26,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     loadPseudo().then((n) {
       if (mounted && _name.text.isEmpty) _name.text = n;
+    });
+    loadSettings().then((_) {
+      if (mounted) setState(() {});
     });
   }
 
@@ -162,6 +166,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       label: const Text('Règles du jeu',
                           style: TextStyle(color: Palette.muted)),
                     ),
+                    if (scene3dSupported)
+                      SwitchListTile(
+                        value: use3d,
+                        onChanged: (v) {
+                          setState(() => use3d = v);
+                          saveSettings();
+                        },
+                        activeThumbColor: Palette.gold,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                        title: const Text('Table en 3D'),
+                        subtitle: const Text('Désactive si ton téléphone rame',
+                            style: TextStyle(color: Palette.muted, fontSize: 12)),
+                      ),
                     const SizedBox(height: 16),
                     const Text(
                       'Tous les téléphones doivent être sur le même Wi-Fi '
