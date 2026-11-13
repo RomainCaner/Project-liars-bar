@@ -32,7 +32,7 @@ namespace Menteur.Game
         readonly HashSet<int> selected = new HashSet<int>();
         DiscoveryListener discovery;
         List<string> ips = new List<string>();
-        readonly Texture2D[] portraits = new Texture2D[Rules.SkinCount];
+        readonly Texture[] portraits = new Texture[Rules.SkinCount];
 
         void Awake()
         {
@@ -41,9 +41,14 @@ namespace Menteur.Game
             if (Application.isMobilePlatform) Screen.orientation = ScreenOrientation.Portrait;
             pseudo = PlayerPrefs.GetString("pseudo", "");
             Sfx.Init(gameObject);
-            for (var i = 0; i < portraits.Length; i++) portraits[i] = Resources.Load<Texture2D>("Portraits/" + i);
+            for (var i = 0; i < portraits.Length; i++) portraits[i] = Resources.Load<Texture2D>("Portraits/" + (i % 5));
             table = new GameObject("Table").AddComponent<TableScene>();
             table.transform.SetParent(transform, false);
+            // Matériau par défaut du projet (Standard ou Lit en URP), pour les silhouettes de secours.
+            var probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            var defaultMaterial = new Material(probe.GetComponent<Renderer>().sharedMaterial);
+            Destroy(probe);
+            StartCoroutine(PortraitStudio.Build(portraits, defaultMaterial));
         }
 
         void OnDestroy() => CloseSession();
@@ -223,7 +228,7 @@ namespace Menteur.Game
                 }
                 e.Use();
             }
-            Ui.Begin();
+            Ui.Begin(column: !(screen == Screen_.Table && view != null && view.Phase != Phase.Lobby));
             switch (screen)
             {
                 case Screen_.Home: DrawHome(); break;
@@ -233,9 +238,10 @@ namespace Menteur.Game
             }
             if (toast != null && Time.time < toastUntil)
             {
-                var y = Ui.H - Ui.SafeBottom - 150;
-                Ui.Fill(Ui.R(30, y, Ui.W - 60, 36), new Color(0.12f, 0.08f, 0.05f, 0.95f));
-                Ui.Label(Ui.R(36, y, Ui.W - 72, 36), toast, 13, Ui.Cream, TextAnchor.MiddleCenter, false, true);
+                var y = Ui.H - Ui.SafeBottom - 170;
+                var tw = Mathf.Min(360, Ui.W - 40);
+                Ui.Panel(Ui.R((Ui.W - tw) / 2, y, tw, 38), new Color(0.12f, 0.08f, 0.05f, 0.96f), 19, new Color(Ui.Gold.r, Ui.Gold.g, Ui.Gold.b, 0.6f));
+                Ui.Label(Ui.R((Ui.W - tw) / 2 + 10, y, tw - 20, 38), toast, 13, Ui.Cream, TextAnchor.MiddleCenter, false, true);
             }
         }
 
@@ -244,8 +250,8 @@ namespace Menteur.Game
         void Header(string title, System.Action back)
         {
             var y = Ui.SafeTop + 8;
-            if (Ui.Button(Ui.R(8, y, 44, 40), "<", new Color(0, 0, 0, 0.3f), Ui.Cream, 22)) back();
-            Ui.Label(Ui.R(60, y, Ui.W - 120, 40), title, 20, Ui.Cream, TextAnchor.MiddleCenter, true);
+            if (Ui.Button(Ui.R(8, y, 44, 40), "<", new Color(0, 0, 0, 0.35f), Ui.Cream, 22)) back();
+            Ui.Title(Ui.R(60, y, Ui.W - 120, 40), title, 22, Ui.Gold);
         }
 
         void DrawHome()
@@ -256,7 +262,7 @@ namespace Menteur.Game
             Ui.Card(Ui.R(222, y + 8, 56, 81), Rank.Queen);
             Ui.Card(Ui.R(170, y, 56, 81), Rank.Joker);
             y += 100;
-            Ui.Shadowed(Ui.R(0, y, Ui.W, 56), "MENTEUR !", 44, Ui.Gold);
+            Ui.Title(Ui.R(0, y, Ui.W, 56), "MENTEUR !", 46, Ui.Gold);
             Ui.Label(Ui.R(0, y + 54, Ui.W, 22), "Bluff, cartes et barillet", 15, Ui.Muted);
             y += 100;
             Ui.Label(Ui.R(40, y, 320, 18), "Ton pseudo", 12, Ui.Muted, TextAnchor.MiddleLeft);
@@ -295,7 +301,7 @@ namespace Menteur.Game
             new[] { "Mains vides", "Un joueur sans carte est sauté. Si tu es le dernier à avoir des cartes, tu es obligé d'accuser." },
             new[] { "Variantes", "Dans le salon, l'hôte peut changer le nombre de Jokers, mettre 2 balles dans les barillets, re-tourner le barillet à chaque tir (risque constant) et activer un minuteur : passé le délai, l'IA joue à ta place." },
             new[] { "Jouer à plusieurs", "Un joueur crée la partie, les autres la rejoignent depuis le même Wi-Fi. Si le Wi-Fi bloque les connexions, l'hôte active son partage de connexion. Si la partie n'apparaît pas, tape l'adresse IP affichée chez l'hôte." },
-            new[] { "Crédits", "Personnages 3D : KayKit Adventurers par Kay Lousberg (kaylousberg.com), licence CC0. Sons synthétisés pour le jeu." },
+            new[] { "Crédits", "Personnages et décor 3D : packs KayKit Adventurers, Skeletons et Dungeon Remastered par Kay Lousberg (kaylousberg.com), licence CC0. Police Rye par Sorkin Type (licence SIL OFL). Sons synthétisés pour le jeu." },
         };
 
         void DrawRules()
@@ -310,7 +316,7 @@ namespace Menteur.Game
             var y = top + 6;
             foreach (var r in RulesText)
             {
-                Ui.Label(Ui.R(24, y, Ui.W - 48, 26), r[0], 17, Ui.Gold, TextAnchor.MiddleLeft, true);
+                Ui.Title(Ui.R(24, y, Ui.W - 48, 26), r[0], 17, Ui.Gold, TextAnchor.MiddleLeft);
                 var h = Ui.TextHeight(r[1], 14, Ui.W - 48);
                 Ui.Label(Ui.R(24, y + 30, Ui.W - 48, h), r[1], 14, Ui.Cream, TextAnchor.UpperLeft, false, true);
                 y += 30 + h + 16;
@@ -332,7 +338,7 @@ namespace Menteur.Game
             var hosts = discovery != null ? discovery.Current() : new List<HostAnnouncement>();
             if (hosts.Count == 0)
             {
-                Ui.Fill(Ui.R(24, y, Ui.W - 48, 64), new Color(0, 0, 0, 0.3f));
+                Ui.Round(Ui.R(24, y, Ui.W - 48, 64), new Color(0, 0, 0, 0.3f), 12);
                 Ui.Label(Ui.R(36, y, Ui.W - 72, 64),
                     discovery != null
                         ? "Recherche en cours… Demande à l'hôte de créer la partie sur le même Wi-Fi que toi."
@@ -411,14 +417,14 @@ namespace Menteur.Game
         {
             Ui.FillScreen(new Color(0, 0, 0, 0.7f));
             var y = Ui.H / 2 - 80;
-            Ui.Fill(Ui.R(40, y, 320, 160), Ui.Panel);
-            Ui.Frame(Ui.R(40, y, 320, 160), Ui.Gold);
-            Ui.Label(Ui.R(50, y + 14, 300, 30), "Quitter la table ?", 18, Ui.Cream, TextAnchor.MiddleCenter, true);
-            Ui.Label(Ui.R(56, y + 46, 288, 44),
+            var x0 = (Ui.W - 320) / 2;
+            Ui.Panel(Ui.R(x0, y, 320, 160), Ui.PanelColor, 16, Ui.Gold);
+            Ui.Title(Ui.R(x0 + 10, y + 14, 300, 30), "Quitter la table ?", 19, Ui.Cream);
+            Ui.Label(Ui.R(x0 + 16, y + 46, 288, 44),
                 session.IsHost ? "La partie sera fermée pour tout le monde." : "Un bot jouera à ta place.", 13, Ui.Muted,
                 TextAnchor.MiddleCenter, false, true);
-            if (Ui.Outline(Ui.R(56, y + 100, 138, 44), "Rester")) confirmLeave = false;
-            if (Ui.Button(Ui.R(206, y + 100, 138, 44), "Quitter", Ui.Blood, Color.white)) Leave();
+            if (Ui.Outline(Ui.R(x0 + 16, y + 100, 138, 44), "Rester")) confirmLeave = false;
+            if (Ui.Button(Ui.R(x0 + 166, y + 100, 138, 44), "Quitter", Ui.Blood, Color.white)) Leave();
         }
 
         static readonly int[] JokerOptions = { 0, 2, 4 };
@@ -434,7 +440,7 @@ namespace Menteur.Game
             var top = Ui.SafeTop + 54;
             var bottomH = host != null ? 118f : 50f;
             var area = Ui.R(0, top, Ui.W, Ui.H - top - Ui.SafeBottom - bottomH);
-            var contentH = (host != null && host.Online ? 92 : 30) + 130 + 190 + 34 + v.Players.Count * 46 + 16;
+            var contentH = (host != null && host.Online ? 92 : 30) + 218 + 190 + 34 + v.Players.Count * 46 + 16;
             Ui.BeginScroll(area, ref scroll, contentH);
             var y = top + 4;
 
@@ -445,8 +451,7 @@ namespace Menteur.Game
                     ipsAt = Time.time + 3;
                     ips = Protocol.LocalAddresses().Select(a => a.ToString()).ToList();
                 }
-                Ui.Fill(Ui.R(20, y, Ui.W - 40, 82), new Color(0, 0, 0, 0.35f));
-                Ui.Frame(Ui.R(20, y, Ui.W - 40, 82), new Color(Ui.Gold.r, Ui.Gold.g, Ui.Gold.b, 0.5f), 1);
+                Ui.Panel(Ui.R(20, y, Ui.W - 40, 82), new Color(0.06f, 0.04f, 0.03f, 0.9f), 12, new Color(Ui.Gold.r, Ui.Gold.g, Ui.Gold.b, 0.55f));
                 Ui.Label(Ui.R(32, y + 6, Ui.W - 64, 34), "Tes amis te trouvent dans « Rejoindre ». Sinon, ils tapent cette adresse :", 12,
                     Ui.Muted, TextAnchor.UpperLeft, false, true);
                 var suffix = host.Port.HasValue && host.Port.Value != Protocol.GamePort ? ":" + host.Port.Value : "";
@@ -462,25 +467,28 @@ namespace Menteur.Game
                 y += 30;
             }
 
-            // Personnage
-            Ui.Label(Ui.R(20, y, 200, 24), "Ton personnage", 15, Ui.Gold, TextAnchor.MiddleLeft, true);
+            // Personnage (9 au choix, sur deux rangées)
+            Ui.Title(Ui.R(20, y, 300, 24), "Ton personnage", 15, Ui.Gold, TextAnchor.MiddleLeft);
             y += 28;
             var mySkin = v.Me != null ? v.Me.Skin : 0;
             for (var i = 0; i < Rules.SkinCount; i++)
             {
-                var r = Ui.R(20 + i * 73, y, 66, 66);
-                Ui.Fill(Ui.R(r.x - 2, r.y - 2, r.width + 4, r.height + 4), i == mySkin ? Ui.Gold : new Color(1, 1, 1, 0.15f));
-                Ui.Fill(r, new Color(0.23f, 0.16f, 0.12f));
-                if (portraits[i] != null) GUI.DrawTexture(Ui.Px(r), portraits[i], ScaleMode.ScaleAndCrop);
-                Ui.Label(Ui.R(r.x - 4, y + 68, 74, 18), Rules.SkinNames[i], 10.5f, i == mySkin ? Ui.Gold : Ui.Muted,
+                var row = i / 5;
+                var col = i % 5;
+                var rx = 20 + col * 73 + (row == 1 ? 36 : 0);
+                var r = Ui.R(rx, y + row * 92, 62, 62);
+                Ui.Round(Ui.R(r.x - 3, r.y - 3, r.width + 6, r.height + 6), i == mySkin ? Ui.Gold : new Color(1, 1, 1, 0.12f), 34);
+                Ui.Round(r, new Color(0.23f, 0.16f, 0.12f), 31);
+                if (portraits[i] != null) GUI.DrawTexture(Ui.Px(Ui.R(r.x + 3, r.y + 3, r.width - 6, r.height - 6)), portraits[i], ScaleMode.ScaleAndCrop);
+                Ui.Label(Ui.R(r.x - 8, r.y + 64, 78, 18), Rules.SkinNames[i], 10, i == mySkin ? Ui.Gold : Ui.Muted,
                     TextAnchor.MiddleCenter, i == mySkin);
                 if (GUI.Button(Ui.Px(r), GUIContent.none, GUIStyle.none)) session.ChooseSkin(i);
             }
-            y += 102;
+            y += 190;
 
             // Règles de la partie
-            Ui.Label(Ui.R(20, y, 300, 24), host != null ? "Règles de la partie" : "Règles (choisies par l'hôte)", 15, Ui.Gold,
-                TextAnchor.MiddleLeft, true);
+            Ui.Title(Ui.R(20, y, 340, 24), host != null ? "Règles de la partie" : "Règles (choisies par l'hôte)", 15, Ui.Gold,
+                TextAnchor.MiddleLeft);
             y += 30;
             var s = v.Settings;
             var jokers = Chips(y, "Jokers", JokerOptions, new[] { "Aucun", "2", "4" }, s.Jokers, host != null);
@@ -492,14 +500,14 @@ namespace Menteur.Game
             y += 160;
 
             // Joueurs
-            Ui.Label(Ui.R(20, y, 300, 24), "Joueurs (" + v.Players.Count + "/" + Rules.MaxPlayers + ")", 15, Ui.Gold,
-                TextAnchor.MiddleLeft, true);
+            Ui.Title(Ui.R(20, y, 300, 24), "Joueurs (" + v.Players.Count + "/" + Rules.MaxPlayers + ")", 15, Ui.Gold,
+                TextAnchor.MiddleLeft);
             y += 30;
             foreach (var p in v.Players.ToList())
             {
-                Ui.Fill(Ui.R(20, y, Ui.W - 40, 40), new Color(0, 0, 0, 0.3f));
+                Ui.Round(Ui.R(20, y, Ui.W - 40, 40), new Color(0, 0, 0, 0.32f), 10);
                 var pr = Ui.R(24, y + 3, 34, 34);
-                Ui.Fill(pr, new Color(0.23f, 0.16f, 0.12f));
+                Ui.Round(pr, new Color(0.23f, 0.16f, 0.12f), 17);
                 if (portraits[p.Skin % portraits.Length] != null)
                     GUI.DrawTexture(Ui.Px(pr), portraits[p.Skin % portraits.Length], ScaleMode.ScaleAndCrop);
                 Ui.Label(Ui.R(66, y + 2, 220, 20), p.Id == v.MyId ? p.Name + " (toi)" : p.Name, 14, Ui.Cream, TextAnchor.MiddleLeft, true);
@@ -542,7 +550,7 @@ namespace Menteur.Game
                 }
                 else
                 {
-                    Ui.Fill(r, on ? new Color(Ui.Gold.r, Ui.Gold.g, Ui.Gold.b, 0.85f) : new Color(0, 0, 0, 0.25f));
+                    Ui.Round(r, on ? new Color(Ui.Gold.r, Ui.Gold.g, Ui.Gold.b, 0.85f) : new Color(0, 0, 0, 0.25f), 10);
                     Ui.Label(r, names[i], 12.5f, on ? Ui.Ink : Ui.Muted, TextAnchor.MiddleCenter, true);
                 }
             }
@@ -555,27 +563,29 @@ namespace Menteur.Game
         {
             var v = view;
             var top = Ui.SafeTop;
+            var W = Ui.W;
 
             // Bandeau du haut.
-            Ui.Fill(Ui.R(-400, 0, 1200, top + 52), new Color(0, 0, 0, 0.45f));
-            if (Ui.Button(Ui.R(6, top + 6, 40, 40), "X", new Color(0, 0, 0, 0.3f), Ui.Cream, 16)) confirmLeave = true;
-            Ui.Label(Ui.R(52, top + 6, 90, 40), "Manche " + v.Round, 14, Ui.Muted, TextAnchor.MiddleLeft, true);
+            Ui.Round(Ui.R(8, top + 6, 52, 40), new Color(0, 0, 0, 0.55f), 12);
+            if (Ui.Button(Ui.R(8, top + 6, 52, 40), "X", new Color(0, 0, 0, 0.01f), Ui.Cream, 16)) confirmLeave = true;
+            Ui.Round(Ui.R(66, top + 6, 108, 40), new Color(0, 0, 0, 0.55f), 12);
+            Ui.Title(Ui.R(66, top + 6, 108, 40), "Manche " + v.Round, 15, Ui.Cream);
+            if (Ui.Button(Ui.R(180, top + 6, 58, 40), Sfx.On ? "Son" : "Muet", new Color(0, 0, 0, 0.55f), Sfx.On ? Ui.Cream : Ui.Muted, 12))
+                Sfx.On = !Sfx.On;
             var secs = v.SecondsLeft;
             if (secs.HasValue)
             {
-                Ui.Fill(Ui.R(132, top + 13, 50, 26), secs.Value <= 5 ? Ui.Blood : new Color(0, 0, 0, 0.5f));
-                Ui.Label(Ui.R(132, top + 13, 50, 26), secs.Value + " s", 13, Color.white, TextAnchor.MiddleCenter, true);
+                Ui.Round(Ui.R(244, top + 6, 56, 40), secs.Value <= 5 ? Ui.Blood : new Color(0, 0, 0, 0.55f), 12);
+                Ui.Label(Ui.R(244, top + 6, 56, 40), secs.Value + " s", 15, Color.white, TextAnchor.MiddleCenter, true);
             }
-            if (Ui.Button(Ui.R(188, top + 9, 46, 34), Sfx.On ? "Son" : "Muet", new Color(0, 0, 0, 0.3f), Sfx.On ? Ui.Cream : Ui.Muted, 11))
-                Sfx.On = !Sfx.On;
             if (v.TableRank.HasValue)
             {
                 var k = v.TableRank.Value;
-                Ui.Fill(Ui.R(240, top + 5, 154, 42), new Color(0, 0, 0, 0.55f));
-                Ui.Frame(Ui.R(240, top + 5, 154, 42), Ui.Gold, 1.2f);
-                Ui.Label(Ui.R(246, top + 7, 112, 14), "CARTE DU TOUR", 8.5f, Ui.Muted, TextAnchor.MiddleRight);
-                Ui.Label(Ui.R(246, top + 20, 112, 24), RankInfo.Plural(k).ToUpperInvariant(), 17, Ui.Gold, TextAnchor.MiddleRight, true);
-                Ui.Card(Ui.R(364, top + 9, 24, 34), k);
+                var bx = W - 186;
+                Ui.Panel(Ui.R(bx, top + 4, 178, 50), new Color(0.06f, 0.04f, 0.03f, 0.88f), 14, Ui.Gold);
+                Ui.Label(Ui.R(bx + 8, top + 8, 120, 14), "CARTE DU TOUR", 9, Ui.Muted, TextAnchor.MiddleRight);
+                Ui.Title(Ui.R(bx + 8, top + 21, 120, 28), RankInfo.Plural(k).ToUpperInvariant(), 19, Ui.Gold, TextAnchor.MiddleRight);
+                Ui.Card(Ui.R(bx + 138, top + 8, 29, 42), k);
             }
 
             DrawPlayerLabels(v);
@@ -584,9 +594,10 @@ namespace Menteur.Game
             var status = Status(v, out var highlight);
             if (status.Length > 0)
             {
-                var r = Ui.R(20, top + 60, Ui.W - 40, 34);
-                Ui.Fill(r, highlight ? Ui.Gold : new Color(0, 0, 0, 0.6f));
-                Ui.Label(Ui.R(28, r.y, r.width - 16, r.height), status, 13, highlight ? Ui.Ink : Ui.Cream, TextAnchor.MiddleCenter, highlight, true);
+                var sw = Mathf.Min(520, W - 40);
+                var r = Ui.R((W - sw) / 2, top + 60, sw, 36);
+                Ui.Panel(r, highlight ? Ui.Gold : new Color(0.06f, 0.04f, 0.03f, 0.82f), 18);
+                Ui.Label(Ui.R(r.x + 12, r.y, r.width - 24, r.height), status, 14, highlight ? Ui.Ink : Ui.Cream, TextAnchor.MiddleCenter, highlight, true);
             }
 
             if (v.Reveal != null && v.Phase == Phase.Reveal) DrawReveal(v);
@@ -603,24 +614,55 @@ namespace Menteur.Game
 
         void DrawPlayerLabels(GameView v)
         {
+            // Positions à l'écran, puis on écarte les étiquettes qui se chevauchent.
+            var boxes = new List<KeyValuePair<PlayerView, Rect>>();
             foreach (var p in v.Players)
             {
                 if (p.Id == v.MyId || !table.LabelPoint(p.Id, out var sp)) continue;
                 var c = Ui.FromScreen(sp);
+                var r = Ui.R(Mathf.Clamp(c.x - 56, 4, Ui.W - 116), Mathf.Clamp(c.y - 50, Ui.SafeTop + 102, Ui.H - 260), 112, 50);
+                boxes.Add(new KeyValuePair<PlayerView, Rect>(p, r));
+            }
+            for (var pass = 0; pass < 4; pass++)
+            for (var i = 0; i < boxes.Count; i++)
+            for (var j = i + 1; j < boxes.Count; j++)
+            {
+                var a = boxes[i].Value;
+                var b = boxes[j].Value;
+                if (!a.Overlaps(b)) continue;
+                var push = (Mathf.Min(a.yMax, b.yMax) - Mathf.Max(a.y, b.y)) / 2 + 2;
+                if (a.y <= b.y) { a.y -= push; b.y += push; }
+                else { a.y += push; b.y -= push; }
+                boxes[i] = new KeyValuePair<PlayerView, Rect>(boxes[i].Key, a);
+                boxes[j] = new KeyValuePair<PlayerView, Rect>(boxes[j].Key, b);
+            }
+            foreach (var e in boxes)
+            {
+                var p = e.Key;
+                var r = e.Value;
                 var current = v.Phase == Phase.Playing && v.CurrentId == p.Id;
-                var r = Ui.R(Mathf.Clamp(c.x - 48, 2, Ui.W - 98), Mathf.Max(Ui.SafeTop + 98, c.y - 44), 96, 44);
-                Ui.Fill(r, current ? new Color(0.24f, 0.16f, 0.04f, 0.9f) : new Color(0.04f, 0.03f, 0.02f, 0.72f));
-                Ui.Frame(r, current ? Ui.Gold : new Color(1, 1, 1, 0.25f), current ? 2 : 1);
-                Ui.Label(Ui.R(r.x + 3, r.y + 2, r.width - 6, 17), p.Name, 12.5f, !p.Alive ? Ui.Muted : current ? Ui.Gold : Ui.Cream,
-                    TextAnchor.MiddleCenter, true);
+                Ui.Panel(r, current ? new Color(0.26f, 0.17f, 0.05f, 0.93f) : new Color(0.05f, 0.035f, 0.025f, 0.82f), 12,
+                    current ? Ui.Gold : new Color(1, 1, 1, 0.18f));
+                var pr = Ui.R(r.x + 5, r.y + 5, 40, 40);
+                Ui.Round(pr, new Color(0.23f, 0.16f, 0.12f), 20);
+                var portrait = portraits[p.Skin % portraits.Length];
+                if (portrait != null)
+                {
+                    var old = GUI.color;
+                    if (!p.Alive) GUI.color = new Color(0.5f, 0.5f, 0.5f, 0.6f);
+                    GUI.DrawTexture(Ui.Px(Ui.R(pr.x + 2, pr.y + 2, 36, 36)), portrait, ScaleMode.ScaleAndCrop);
+                    GUI.color = old;
+                }
+                Ui.Label(Ui.R(r.x + 50, r.y + 4, r.width - 54, 18), p.Name, 13, !p.Alive ? Ui.Muted : current ? Ui.Gold : Ui.Cream,
+                    TextAnchor.MiddleLeft, true);
                 if (!p.Alive)
                 {
-                    Ui.Label(Ui.R(r.x, r.y + 20, r.width, 18), "Éliminé", 11.5f, Ui.Blood, TextAnchor.MiddleCenter, true);
+                    Ui.Label(Ui.R(r.x + 50, r.y + 24, r.width - 54, 18), "Éliminé", 12, Ui.Blood, TextAnchor.MiddleLeft, true);
                     continue;
                 }
                 var info = !p.Connected ? "déconnecté" : p.CardCount + (p.CardCount > 1 ? " cartes" : " carte");
-                Ui.Label(Ui.R(r.x, r.y + 18, r.width, 14), info, 10, !p.Connected ? Ui.Blood : Ui.Muted);
-                Ui.ShotDots(r.x + (r.width - 6 * 9 + 3) / 2, r.y + 34, p.Shots, 6);
+                Ui.Label(Ui.R(r.x + 50, r.y + 21, r.width - 54, 14), info, 10.5f, !p.Connected ? Ui.Blood : Ui.Muted, TextAnchor.MiddleLeft);
+                Ui.ShotDots(r.x + 50, r.y + 37, p.Shots, 6);
             }
         }
 
@@ -646,9 +688,9 @@ namespace Menteur.Game
             var r = v.Reveal;
             var elapsed = Time.time - revealAt;
             var n = r.Cards.Count;
-            const float w = 62, h = 90, gap = 10;
+            const float w = 70, h = 102, gap = 12;
             var x0 = (Ui.W - (n * w + (n - 1) * gap)) / 2;
-            var y = Ui.H * 0.34f;
+            var y = Ui.H * 0.3f;
             for (var i = 0; i < n; i++)
             {
                 var shown = elapsed > 0.35f + 0.3f * i;
@@ -657,11 +699,10 @@ namespace Menteur.Game
             }
             if (elapsed < 0.6f + 0.3f * n) return;
             var c = r.WasLie ? Ui.Blood : Ui.Truth;
-            var box = Ui.R(80, y + h + 16, 240, 50);
-            Ui.Fill(box, new Color(0, 0, 0, 0.7f));
-            Ui.Frame(box, c, 3);
-            Ui.Label(box, r.WasLie ? "MENSONGE !" : "VÉRITÉ !", 28, c, TextAnchor.MiddleCenter, true);
-            Ui.Shadowed(Ui.R(0, box.yMax + 8, Ui.W, 22), v.NameOf(r.LoserId) + " va tirer…", 14, Ui.Cream, TextAnchor.MiddleCenter, false);
+            var box = Ui.R((Ui.W - 260) / 2, y + h + 18, 260, 56);
+            Ui.Panel(box, new Color(0.05f, 0.03f, 0.02f, 0.9f), 14, c);
+            Ui.Title(box, r.WasLie ? "MENSONGE !" : "VÉRITÉ !", 30, c);
+            Ui.Shadowed(Ui.R(0, box.yMax + 10, Ui.W, 22), v.NameOf(r.LoserId) + " va tirer…", 15, Ui.Cream, TextAnchor.MiddleCenter, false);
         }
 
         void DrawRoulette(GameView v)
@@ -674,9 +715,10 @@ namespace Menteur.Game
             if (shots < 0) shots = 0;
             string title, subtitle;
             var color = Ui.Cream;
+            var name = shooter != null ? shooter.Name : "?";
             if (!resultShown)
             {
-                title = mine ? "À toi de tirer…" : (shooter != null ? shooter.Name : "?") + " prend le revolver…";
+                title = mine ? "À toi de tirer…" : name + " prend le revolver…";
                 var risk = Mathf.RoundToInt((float)v.Settings.Risk(shots) * 100);
                 subtitle = v.Settings.Respin
                     ? "Barillet re-tourné — " + risk + " % de risque"
@@ -686,21 +728,22 @@ namespace Menteur.Game
             {
                 title = "PAN !";
                 color = Ui.Blood;
-                subtitle = mine ? "Tu es éliminé." : (shooter != null ? shooter.Name : "?") + " est éliminé.";
+                subtitle = mine ? "Tu es éliminé." : name + " est éliminé.";
             }
             else
             {
                 title = "clic…";
                 color = Ui.Truth;
-                subtitle = mine ? "Tu survis… pour l'instant." : (shooter != null ? shooter.Name : "?") + " survit.";
+                subtitle = mine ? "Tu survis… pour l'instant." : name + " survit.";
             }
-            var y = Ui.SafeTop + 60;
-            Ui.Fill(Ui.R(20, y, Ui.W - 40, 74), new Color(0, 0, 0, 0.62f));
-            Ui.Label(Ui.R(24, y + 4, Ui.W - 48, 42), title, title == "PAN !" ? 38 : 21, color, TextAnchor.MiddleCenter, true);
-            Ui.Label(Ui.R(24, y + 46, Ui.W - 48, 22), subtitle, 13, Ui.Cream);
+            var bw = Mathf.Min(460, Ui.W - 40);
+            var box = Ui.R((Ui.W - bw) / 2, Ui.SafeTop + 60, bw, 80);
+            Ui.Panel(box, new Color(0.05f, 0.03f, 0.02f, 0.86f), 16, new Color(color.r, color.g, color.b, 0.7f));
+            Ui.Title(Ui.R(box.x + 8, box.y + 4, box.width - 16, 46), title, title == "PAN !" ? 40 : 22, color);
+            Ui.Label(Ui.R(box.x + 8, box.y + 50, box.width - 16, 22), subtitle, 13.5f, Ui.Cream);
             if (!v.IMustShoot) return;
-            var by = Ui.H - Ui.SafeBottom - 196;
-            if (Ui.Button(Ui.R(20, by, Ui.W - 40, 62), "APPUYER SUR LA DÉTENTE", Ui.Blood, Color.white, 18, !shootPressed))
+            var w = Mathf.Min(420, Ui.W - 40);
+            if (Ui.Button(Ui.R((Ui.W - w) / 2, Ui.H - Ui.SafeBottom - 210, w, 64), "APPUYER SUR LA DÉTENTE", Ui.Blood, Color.white, 19, !shootPressed))
             {
                 shootPressed = true;
                 session.Shoot();
@@ -712,40 +755,46 @@ namespace Menteur.Game
             var me = v.Me;
             var alive = me != null && me.Alive;
             var bottom = Ui.H - Ui.SafeBottom;
-            var n = v.Hand.Count;
-            var cw = n > 0 ? Mathf.Min(64f, (Ui.W - 24 - 6 * (n - 1)) / n) : 64f;
-            var ch = cw * 1.45f;
-            var panelH = 24 + (alive ? ch + 26 + 60 : 40);
-            Ui.Fill(Ui.R(-400, bottom - panelH, 1200, panelH + Ui.SafeBottom + 4), new Color(0, 0, 0, 0.55f));
-            var y = bottom - panelH + 6;
-            Ui.Label(Ui.R(12, y, 90, 16), me == null ? "Spectateur" : alive ? "Ton barillet" : "Éliminé", 11.5f, alive ? Ui.Muted : Ui.Blood,
-                TextAnchor.MiddleLeft);
-            if (me != null) Ui.ShotDots(92, y + 4, me.Shots, 8);
+            var W = Ui.W;
+
+            // Barillet et risque, en bas à gauche.
+            Ui.Round(Ui.R(10, bottom - 112, 150, 52), new Color(0.05f, 0.035f, 0.025f, 0.8f), 12);
+            Ui.Label(Ui.R(20, bottom - 108, 130, 18), me == null ? "Spectateur" : alive ? "Ton barillet" : "Éliminé", 11.5f,
+                alive ? Ui.Muted : Ui.Blood, TextAnchor.MiddleLeft, true);
+            if (me != null) Ui.ShotDots(20, bottom - 88, me.Shots, 9);
             if (alive)
-                Ui.Label(Ui.R(Ui.W - 150, y, 138, 16), "Risque : " + Mathf.RoundToInt((float)v.RiskFor(me) * 100) + " %", 11.5f, Ui.Muted,
-                    TextAnchor.MiddleRight);
+                Ui.Label(Ui.R(20, bottom - 76, 130, 14), "Risque : " + Mathf.RoundToInt((float)v.RiskFor(me) * 100) + " %", 10.5f, Ui.Muted,
+                    TextAnchor.MiddleLeft);
             if (!alive)
             {
-                Ui.Label(Ui.R(0, y + 18, Ui.W, 22), "Tu regardes les autres s'entretuer.", 12.5f, Ui.Muted);
+                Ui.Shadowed(Ui.R(0, bottom - 50, W, 30), "Tu regardes les autres s'entretuer.", 14, Ui.Muted, TextAnchor.MiddleCenter, false);
                 return;
             }
 
-            // Ma main.
-            var hy = y + 36;
+            // Ma main, en éventail.
+            var n = v.Hand.Count;
+            var cw = Ui.Landscape ? 78f : Mathf.Min(70f, (W - 40) / Mathf.Max(1, n));
+            var ch = cw * 1.45f;
+            var handBottom = bottom - (v.Phase == Phase.Playing ? 66 : 14);
             if (n == 0)
             {
-                Ui.Label(Ui.R(0, hy, Ui.W, ch), "Plus de cartes : tu attends la fin de la manche.", 12.5f, Ui.Muted);
+                Ui.Shadowed(Ui.R(0, handBottom - 40, W, 30), "Plus de cartes : tu attends la fin de la manche.", 13, Ui.Muted, TextAnchor.MiddleCenter, false);
             }
             else
             {
-                var x0 = (Ui.W - (n * cw + (n - 1) * 6)) / 2;
+                var spacing = cw * 0.78f;
+                var x0 = W / 2 - (spacing * (n - 1) + cw) / 2;
+                var mouse = Event.current.mousePosition;
                 for (var i = 0; i < n; i++)
                 {
                     var card = v.Hand[i];
                     var sel = selected.Contains(card.Id);
-                    var r = Ui.R(x0 + i * (cw + 6), hy - (sel ? 14 : 0), cw, ch);
-                    Ui.Card(r, card.Rank, sel);
-                    if (v.CanPlay && v.Phase == Phase.Playing && GUI.Button(Ui.Px(r), GUIContent.none, GUIStyle.none))
+                    var t = n == 1 ? 0 : i / (float)(n - 1) - 0.5f;
+                    var angle = t * 16f;
+                    var lift = Mathf.Abs(t) * 10f;
+                    var r = Ui.R(x0 + i * spacing, handBottom - ch + lift - (sel ? 22 : 0), cw, ch);
+                    Ui.Card(r, card.Rank, sel, false, angle);
+                    if (v.CanPlay && v.Phase == Phase.Playing && GUI.Button(Ui.Px(Ui.R(r.x, r.y, i == n - 1 ? cw : spacing, ch)), GUIContent.none, GUIStyle.none))
                     {
                         if (sel) selected.Remove(card.Id);
                         else if (selected.Count < Rules.MaxCardsPerPlay) selected.Add(card.Id);
@@ -753,37 +802,46 @@ namespace Menteur.Game
                 }
             }
             if (v.Phase != Phase.Playing) return;
-            var by = bottom - 56;
+            var bw = Mathf.Min(210f, (W - 36) / 2);
+            var by = bottom - 58;
             var word = v.TableRank.HasValue
                 ? (selected.Count > 1 ? RankInfo.Plural(v.TableRank.Value) : RankInfo.Label(v.TableRank.Value)).ToUpperInvariant()
                 : "";
-            var label = selected.Count == 0 ? (v.CanPlay ? "TOUCHE TES CARTES" : "POSER") : "POSER " + selected.Count + " " + word;
-            if (Ui.Primary(Ui.R(12, by, 184, 48), label, v.CanPlay && selected.Count > 0))
+            var label = selected.Count == 0 ? (v.CanPlay ? "CHOISIS TES CARTES" : "POSER") : "POSER " + selected.Count + " " + word;
+            if (Ui.Primary(Ui.R(W / 2 - bw - 6, by, bw, 50), label, v.CanPlay && selected.Count > 0))
             {
                 session.Play(selected.ToList());
                 selected.Clear();
             }
-            if (Ui.Button(Ui.R(204, by, 184, 48), "MENTEUR !", Ui.Blood, Color.white, 16, v.CanCall)) session.CallLiar();
+            if (Ui.Button(Ui.R(W / 2 + 6, by, bw, 50), "MENTEUR !", Ui.Blood, Color.white, 17, v.CanCall)) session.CallLiar();
         }
 
         void DrawGameOver(GameView v)
         {
-            Ui.FillScreen(new Color(0, 0, 0, 0.72f));
+            Ui.FillScreen(new Color(0, 0, 0, 0.7f));
             var won = v.WinnerId == v.MyId;
-            var y = Ui.H / 2 - 130;
-            Ui.Shadowed(Ui.R(0, y, Ui.W, 52), won ? "VICTOIRE !" : v.NameOf(v.WinnerId) + " gagne", won ? 40 : 30, Ui.Gold);
-            Ui.Label(Ui.R(0, y + 56, Ui.W, 24), won ? "Dernier survivant de la table." : "Le barillet a parlé.", 15, Ui.Muted);
+            var y = Ui.H / 2 - 140;
+            var x0 = (Ui.W - 320) / 2;
+            Ui.Panel(Ui.R(x0 - 20, y - 20, 360, 280), new Color(0.10f, 0.07f, 0.05f, 0.95f), 20, Ui.Gold);
+            var winner = v.Player(v.WinnerId);
+            if (winner != null && portraits[winner.Skin % portraits.Length] != null)
+            {
+                Ui.Round(Ui.R(Ui.W / 2 - 36, y - 6, 72, 72), Ui.Gold, 36);
+                GUI.DrawTexture(Ui.Px(Ui.R(Ui.W / 2 - 33, y - 3, 66, 66)), portraits[winner.Skin % portraits.Length], ScaleMode.ScaleAndCrop);
+            }
+            Ui.Title(Ui.R(0, y + 70, Ui.W, 46), won ? "VICTOIRE !" : v.NameOf(v.WinnerId) + " gagne", won ? 36 : 28, Ui.Gold);
+            Ui.Label(Ui.R(0, y + 114, Ui.W, 22), won ? "Dernier survivant de la table." : "Le barillet a parlé.", 14, Ui.Muted);
             var host = session as HostSession;
             if (host != null)
             {
-                if (Ui.Primary(Ui.R(60, y + 110, 280, 52), "NOUVELLE PARTIE")) host.BackToLobby();
+                if (Ui.Primary(Ui.R(x0, y + 148, 320, 50), "NOUVELLE PARTIE")) host.BackToLobby();
             }
             else
             {
-                Ui.Label(Ui.R(20, y + 110, Ui.W - 40, 52), "En attente de l'hôte pour une nouvelle partie…", 13.5f, Ui.Muted,
+                Ui.Label(Ui.R(x0, y + 148, 320, 50), "En attente de l'hôte pour une nouvelle partie…", 13, Ui.Muted,
                     TextAnchor.MiddleCenter, false, true);
             }
-            if (Ui.Outline(Ui.R(60, y + 174, 280, 46), "Quitter la table")) Leave();
+            if (Ui.Outline(Ui.R(x0, y + 206, 320, 44), "Quitter la table")) Leave();
         }
     }
 }

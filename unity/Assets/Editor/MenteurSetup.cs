@@ -18,16 +18,23 @@ namespace Menteur.EditorTools
         const string ScenePath = "Assets/Scenes/Main.unity";
         const string CharactersDir = "Assets/Resources/Characters";
 
-        // Pack KayKit Adventurers (Kay Lousberg, licence CC0), version figée.
-        const string BaseUrl =
+        // Packs KayKit Adventurers et Skeletons (Kay Lousberg, licence CC0), versions figées.
+        const string AdventurersUrl =
             "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/" +
             "672074b73ba276876a19e8816ecdc5241817ab47/addons/kaykit_character_pack_adventures/Characters/fbx/";
+        const string SkeletonsUrl =
+            "https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0/" +
+            "15b62b9bad122f72926c10fb14d622c73819fa54/addons/kaykit_character_pack_skeletons/Characters/fbx/";
 
         static readonly string[] Files =
         {
-            "knight_texture.png", "barbarian_texture.png", "mage_texture.png", "rogue_texture.png",
+            "knight_texture.png", "barbarian_texture.png", "mage_texture.png", "rogue_texture.png", "skeleton_texture.png",
             "Knight.fbx", "Barbarian.fbx", "Mage.fbx", "Rogue.fbx", "RogueHooded.fbx",
+            "Skeleton_Minion.fbx", "Skeleton_Warrior.fbx", "Skeleton_Rogue.fbx", "Skeleton_Mage.fbx",
         };
+
+        static string UrlOf(string file) =>
+            (file.StartsWith("Skeleton") || file.StartsWith("skeleton") ? SkeletonsUrl : AdventurersUrl) + file;
 
         static MenteurSetup()
         {
@@ -47,9 +54,18 @@ namespace Menteur.EditorTools
                 Debug.LogWarning("Menteur : configuration automatique incomplète (" + e.Message + ")");
             }
             if (Application.isBatchMode || Missing().Count == 0 || SessionState.GetBool("menteur.asked", false)) return;
+            // Personnages déjà présents : on complète discrètement (squelettes ajoutés plus tard).
+            if (File.Exists(Path.Combine(CharactersDir, "Knight.fbx")))
+            {
+                SessionState.SetBool("menteur.asked", true);
+                if (EditorUtility.DisplayDialog("Menteur !", "Nouveaux personnages disponibles (4 squelettes, environ 90 Mo). Les télécharger ?",
+                        "Télécharger", "Plus tard"))
+                    DownloadCharacters();
+                return;
+            }
             SessionState.SetBool("menteur.asked", true);
             if (EditorUtility.DisplayDialog("Menteur !",
-                    "Télécharger les personnages 3D animés (pack KayKit Adventurers, licence CC0, environ 100 Mo) ?\n\n" +
+                    "Télécharger les personnages 3D animés (packs KayKit Adventurers et Skeletons, licence CC0, environ 190 Mo) ?\n\n" +
                     "Sans eux, le jeu fonctionne avec des silhouettes simplifiées. " +
                     "Tu pourras le faire plus tard via le menu Menteur.",
                     "Télécharger", "Plus tard"))
@@ -107,7 +123,7 @@ namespace Menteur.EditorTools
                             missing[i] + "  (" + (i + 1) + "/" + missing.Count + ")", (float)i / missing.Count);
                         var target = Path.Combine(CharactersDir, missing[i]);
                         var temp = target + ".part";
-                        web.DownloadFile(BaseUrl + missing[i], temp);
+                        web.DownloadFile(UrlOf(missing[i]), temp);
                         if (File.Exists(target)) File.Delete(target);
                         File.Move(temp, target);
                     }
@@ -170,11 +186,22 @@ namespace Menteur.EditorTools
         };
 
         bool Ours => assetPath.Replace('\\', '/').Contains("/Resources/Characters/");
+        bool Prop => assetPath.Replace('\\', '/').Contains("/Resources/Props/");
 
-        public override uint GetVersion() => 2;
+        public override uint GetVersion() => 3;
 
         void OnPreprocessModel()
         {
+            if (Prop)
+            {
+                var prop = (ModelImporter)assetImporter;
+                prop.isReadable = true; // nécessaire pour orienter chaises et murs automatiquement
+                prop.importAnimation = false;
+                prop.animationType = ModelImporterAnimationType.None;
+                prop.importCameras = false;
+                prop.importLights = false;
+                return;
+            }
             if (!Ours) return;
             var importer = (ModelImporter)assetImporter;
             importer.animationType = ModelImporterAnimationType.Legacy;

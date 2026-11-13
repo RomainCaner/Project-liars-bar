@@ -71,8 +71,9 @@ Checks~/       projets .NET de vérification, ignorés par Unity
 Choix techniques, faits pour limiter les surprises sans éditeur sous la main :
 
 - **Pas de scène ni de prefab à maintenir** : `App` se crée tout seul au lancement
-  (`RuntimeInitializeOnLoadMethod`) et construit la salle, la table et le revolver avec des
-  primitives.
+  (`RuntimeInitializeOnLoadMethod`) et construit la taverne avec les accessoires KayKit
+  (`Props.cs` les met à l'échelle et les oriente automatiquement), vue depuis ta place au bout
+  de la table.
 - **Interface en IMGUI** (`OnGUI`) : incluse dans le moteur, identique sur toutes les versions
   d'Unity.
 - **Animations « Legacy »** pilotées en code : pose assise en boucle, gestes du haut du corps
@@ -88,5 +89,8 @@ cd unity/Checks~/Editor && dotnet build   # scripts d'éditeur contre UnityEdito
 
 ## Crédits
 
-Personnages : *KayKit Adventurers* par Kay Lousberg (kaylousberg.com), licence CC0.
-Sons synthétisés par `tool/make_sounds.py`.
+- Personnages : *KayKit Adventurers* et *KayKit Skeletons* par Kay Lousberg (kaylousberg.com),
+  licence CC0 (téléchargés par le menu « Menteur »).
+- Décor de la taverne : *KayKit Dungeon Remastered* (même auteur, CC0), dans `Assets/Resources/Props`.
+- Police des titres : *Rye* par Sorkin Type, licence SIL Open Font License (`Assets/Resources/Fonts/OFL-Rye.txt`).
+- Images des cartes : `web3d/tools/render-cards.mjs` ; sons : `tool/make_sounds.py`.

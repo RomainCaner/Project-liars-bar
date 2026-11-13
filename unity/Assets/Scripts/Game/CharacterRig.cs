@@ -8,13 +8,23 @@ namespace Menteur.Game
 {
     public sealed class CharacterRig : MonoBehaviour
     {
+        public static bool ModelsInstalled => Resources.Load<GameObject>("Characters/Knight") != null;
+
         public const float Height = 1.49f;
         const float NeckHeight = 0.77f; // hauteur de l'os « head » debout, à l'échelle voulue
         const float HeadUp = 0.148f * Height;
         const float HeadSide = 0.228f * Height;
 
-        static readonly string[] Models = { "Knight", "Barbarian", "Mage", "Rogue", "RogueHooded" };
-        static readonly string[] Textures = { "knight_texture", "barbarian_texture", "mage_texture", "rogue_texture", "rogue_texture" };
+        static readonly string[] Models =
+        {
+            "Knight", "Barbarian", "Mage", "Rogue", "RogueHooded",
+            "Skeleton_Minion", "Skeleton_Warrior", "Skeleton_Rogue", "Skeleton_Mage",
+        };
+        static readonly string[] Textures =
+        {
+            "knight_texture", "barbarian_texture", "mage_texture", "rogue_texture", "rogue_texture",
+            "skeleton_texture", "skeleton_texture", "skeleton_texture", "skeleton_texture",
+        };
         static readonly Regex Props = new Regex("Sword|Shield|Axe|Spellbook|Wand|Staff|Knife|Crossbow|Throwable|Mug");
 
         public bool Animated { get; private set; }
@@ -41,8 +51,10 @@ namespace Menteur.Game
             rig.slumpSide = Random.value < 0.5f ? -1 : 1;
             var i = Mathf.Abs(skin) % Models.Length;
             var prefab = Resources.Load<GameObject>("Characters/" + Models[i]);
-            if (prefab != null) rig.BuildModel(prefab, Resources.Load<Texture2D>("Characters/" + Textures[i]));
-            else rig.BuildFallback(fallbackMaterial, i);
+            // Squelettes pas encore téléchargés : on prend un aventurier à la place.
+            if (prefab == null && i >= 5) prefab = Resources.Load<GameObject>("Characters/" + Models[i - 5]);
+            if (prefab != null) rig.BuildModel(prefab, Resources.Load<Texture2D>("Characters/" + Textures[prefab.name.StartsWith("Skeleton") ? i : i % 5]));
+            else rig.BuildFallback(fallbackMaterial, i % 5);
             return rig;
         }
 
