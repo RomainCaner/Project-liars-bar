@@ -20,6 +20,11 @@ APK Android **et** version Windows depuis le même projet.
    **`unity`** (celui qui contient `Assets`, `Packages` et `ProjectSettings`), pas la racine du
    dépôt. Si Hub signale que la version d'éditeur du projet (2021.3) n'est pas installée,
    choisis la tienne : Unity met le projet à niveau tout seul.
+
+   **Si Hub répond « Veuillez ajouter un projet valide »** (certaines versions récentes de Hub
+   sont plus exigeantes) : crée un projet neuf depuis Hub (**Nouveau projet → 3D**, Built-In ou
+   Universal), ferme Unity, puis copie les dossiers `Assets/Scripts`, `Assets/Editor` et
+   `Assets/Resources` de ce dépôt dans le dossier `Assets` du nouveau projet, et rouvre-le.
 4. À la première ouverture, le projet se configure tout seul :
    - il crée la scène `Assets/Scenes/Main.unity` et règle le mode portrait ;
    - il propose de **télécharger les personnages 3D** (pack KayKit Adventurers, CC0, ~100 Mo).
@@ -28,7 +33,15 @@ APK Android **et** version Windows depuis le même projet.
    dans la scène.
 
 Dans l'éditeur, règle la vue *Game* sur un format portrait (par ex. 1080×2400) pour voir le
-jeu comme sur téléphone. La souris remplace le doigt.
+jeu comme sur téléphone, ou laisse-la en paysage pour la version PC. La souris remplace le doigt.
+
+En jeu :
+
+- **glisser** sur la scène (ou flèches ← →) pour tourner la tête ; la vue revient d'elle-même
+  vers le joueur dont c'est le tour ;
+- **gestes** en bas à gauche, vus par toute la table : frapper la table, bravo, menace,
+  bras d'honneur ;
+- l'hôte choisit la **table ronde** (par défaut) ou **longue** dans le salon.
 
 ## Menu « Menteur »
 
@@ -66,8 +79,9 @@ Checks~/       projets .NET de vérification, ignorés par Unity
 Choix techniques, faits pour limiter les surprises sans éditeur sous la main :
 
 - **Pas de scène ni de prefab à maintenir** : `App` se crée tout seul au lancement
-  (`RuntimeInitializeOnLoadMethod`) et construit la salle, la table et le revolver avec des
-  primitives.
+  (`RuntimeInitializeOnLoadMethod`) et construit la taverne avec les accessoires KayKit
+  (`Props.cs` les met à l'échelle et les oriente automatiquement), vue depuis ta place au bout
+  de la table.
 - **Interface en IMGUI** (`OnGUI`) : incluse dans le moteur, identique sur toutes les versions
   d'Unity.
 - **Animations « Legacy »** pilotées en code : pose assise en boucle, gestes du haut du corps
@@ -83,5 +97,9 @@ cd unity/Checks~/Editor && dotnet build   # scripts d'éditeur contre UnityEdito
 
 ## Crédits
 
-Personnages : *KayKit Adventurers* par Kay Lousberg (kaylousberg.com), licence CC0.
-Sons synthétisés par `tool/make_sounds.py`.
+- Personnages : *KayKit Adventurers* et *KayKit Skeletons* par Kay Lousberg (kaylousberg.com),
+  licence CC0 (téléchargés par le menu « Menteur »).
+- Décor de la taverne : *KayKit Dungeon Remastered* et table ronde de *KayKit Restaurant Bits*
+  (même auteur, CC0), dans `Assets/Resources/Props`.
+- Police des titres : *Rye* par Sorkin Type, licence SIL Open Font License (`Assets/Resources/Fonts/OFL-Rye.txt`).
+- Images des cartes : `web3d/tools/render-cards.mjs` ; sons : `tool/make_sounds.py`.

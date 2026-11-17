@@ -20,6 +20,7 @@ namespace Menteur.Core
         public int Bullets = 1;       // 1 ou 2
         public bool Respin;           // barillet re-tourné avant chaque tir
         public int TurnSeconds;       // 0 = pas de minuteur
+        public int Table;             // 0 = table ronde, 1 = table longue
 
         public GameSettings Clone() => (GameSettings)MemberwiseClone();
 
@@ -32,7 +33,7 @@ namespace Menteur.Core
 
         public Dictionary<string, object> ToJson() => new Dictionary<string, object>
         {
-            { "jokers", Jokers }, { "bullets", Bullets }, { "respin", Respin }, { "turn", TurnSeconds },
+            { "jokers", Jokers }, { "bullets", Bullets }, { "respin", Respin }, { "turn", TurnSeconds }, { "tableStyle", Table },
         };
 
         public static GameSettings FromJson(Dictionary<string, object> j)
@@ -41,7 +42,7 @@ namespace Menteur.Core
             return new GameSettings
             {
                 Jokers = j.Int("jokers", 2), Bullets = j.Int("bullets", 1),
-                Respin = j.Bool("respin"), TurnSeconds = j.Int("turn"),
+                Respin = j.Bool("respin"), TurnSeconds = j.Int("turn"), Table = j.Int("tableStyle"),
             };
         }
     }
@@ -102,6 +103,10 @@ namespace Menteur.Core
         public int Version;
         public readonly List<string> Log = new List<string>();
 
+        /// <summary>Dernier geste de chaque joueur : (geste, numéro d'ordre).</summary>
+        public readonly Dictionary<string, KeyValuePair<int, int>> Emotes = new Dictionary<string, KeyValuePair<int, int>>();
+        int emoteSeq;
+
         public GameEngine(Random random = null) { rng = random ?? new Random(); }
 
         // ------------------------------------------------------------ helpers
@@ -158,7 +163,8 @@ namespace Menteur.Core
         public void UpdateSettings(GameSettings s)
         {
             if (Phase != Phase.Lobby && Phase != Phase.GameOver) throw new GameError("Partie en cours");
-            if ((s.Jokers != 0 && s.Jokers != 2 && s.Jokers != 4) || s.Bullets < 1 || s.Bullets > 2 || s.TurnSeconds < 0)
+            if ((s.Jokers != 0 && s.Jokers != 2 && s.Jokers != 4) || s.Bullets < 1 || s.Bullets > 2 || s.TurnSeconds < 0 ||
+                s.Table < 0 || s.Table > 1)
                 throw new GameError("Réglage invalide");
             Settings = s.Clone();
             Touch();
@@ -180,6 +186,16 @@ namespace Menteur.Core
             if (s == null) return;
             s.Connected = connected;
             AddLog(connected ? s.Name + " est revenu" : s.Name + " s'est déconnecté");
+            Touch();
+        }
+
+        /// <summary>Geste visible par toute la table (frapper, applaudir, menacer…).</summary>
+        public void Emote(string playerId, int emote)
+        {
+            var s = SeatOf(playerId);
+            if (emote < 0 || emote >= Rules.EmoteNames.Length) throw new GameError("Geste inconnu");
+            if (!s.Alive && Phase != Phase.Lobby) throw new GameError("Les morts ne font plus de gestes");
+            Emotes[playerId] = new KeyValuePair<int, int>(emote, ++emoteSeq);
             Touch();
         }
 
@@ -413,6 +429,8 @@ namespace Menteur.Core
                 { "winner", WinnerId },
                 { "deck", deck },
                 { "settings", Settings.ToJson() },
+                { "emotes", Emotes.Select(e => (object)new Dictionary<string, object>
+                    { { "id", e.Key }, { "e", e.Value.Key }, { "n", e.Value.Value } }).ToList() },
                 { "log", Log.Skip(Math.Max(0, Log.Count - 8)).Cast<object>().ToList() },
             };
         }

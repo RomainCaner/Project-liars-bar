@@ -12,7 +12,8 @@ namespace Menteur.Game
     [DefaultExecutionOrder(100)] // après CharacterRig, pour que le revolver suive la main
     public sealed class TableScene : MonoBehaviour
     {
-        const float TableY = 0.8f, TableL = 3.3f, TableW = 1.25f;
+        // Table « table_long » du pack : 2 x 4 unités natives, 1 de haut.
+        const float TableY = 1.0f * Props.F, TableL = 4f * Props.F, TableW = 2f * Props.F;
 
         public sealed class SeatView
         {
@@ -31,9 +32,12 @@ namespace Menteur.Game
         public float ScreenFlash { get; private set; }
 
         Shader shader;
-        Material cardBack, wood, darkWood;
-        Transform world, gun, drum, lamp;
+        Material cardBack, cardBackTex, wood, darkWood, felt;
+        readonly Material[] cardFaces = new Material[4];
+        Transform world, gun, drum;
         Light muzzle;
+        readonly List<Light> flames = new List<Light>();
+        readonly List<float> flameBase = new List<float>();
         readonly List<Transform> pile = new List<Transform>();
         readonly List<Tween> tweens = new List<Tween>();
         GameView prev;
@@ -42,17 +46,36 @@ namespace Menteur.Game
         float shake, camRoll, camDrop;
         Vector3 camBase;
 
-        static readonly Vector3 Pile = new Vector3(0, TableY + 0.035f, 0.15f);
-        static readonly Vector3 GunRest = new Vector3(0.3f, TableY + 0.06f, -0.6f);
-        static readonly Quaternion GunRestRot = Quaternion.Euler(0, 55, 90);
-        static readonly Vector3 CamTarget = new Vector3(0, 0.55f, 0.55f);
+        // Position du tas et du revolver : dépend de la forme de la table.
+        Vector3 Pile = new Vector3(0, TableY + 0.012f, 0.0f);
+        Vector3 GunRest = new Vector3(0.28f, TableY + 0.035f, -0.5f);
+        const float RoundRadius = 1.5f * Props.F;   // table_round_A : 3 unités natives de diamètre
+        const float RoundSeat = 1.36f;              // distance des chaises au centre
+        int tableStyle = -1;
+        Transform tableGroup;
+        Vector3 mySeat = new Vector3(0, 0, -RoundSeat);
+
+        // Regard libre (glisser à la souris / au doigt) et regard automatique vers le joueur actif.
+        float lookYaw, lookPitch, autoYaw, lastManualLook = -100;
+        readonly Dictionary<string, int> emoteSeen = new Dictionary<string, int>();
+        readonly List<Drop> drops = new List<Drop>();
+        Material blood;
+
+        sealed class Drop
+        {
+            public Transform T;
+            public Vector3 V;
+            public bool Landed;
+        }
+        static readonly Quaternion GunRestRot = Quaternion.Euler(0, 62, 90);
+        static Vector3 CamTarget = new Vector3(0, 0.45f, 0.35f);
 
         // Places autour de la table : position (x, z) et point regardé.
         static readonly Dictionary<string, Vector4> Slots = new Dictionary<string, Vector4>
         {
-            { "leftNear", new Vector4(-0.86f, -0.2f, 0, -0.2f) }, { "leftFar", new Vector4(-0.86f, 0.95f, 0, 0.95f) },
-            { "far", new Vector4(0, 1.98f, 0, 0) },
-            { "rightFar", new Vector4(0.86f, 0.95f, 0, 0.95f) }, { "rightNear", new Vector4(0.86f, -0.2f, 0, -0.2f) },
+            { "leftNear", new Vector4(-1.02f, -0.6f, 0, -0.6f) }, { "leftFar", new Vector4(-1.02f, 0.6f, 0, 0.6f) },
+            { "far", new Vector4(0, 1.64f, 0, 0) },
+            { "rightFar", new Vector4(1.02f, 0.6f, 0, 0.6f) }, { "rightNear", new Vector4(1.02f, -0.6f, 0, -0.6f) },
         };
 
         static readonly string[][] SlotOrder =
@@ -144,109 +167,192 @@ namespace Menteur.Game
 
             world = new GameObject("World").transform;
             world.SetParent(transform, false);
-            wood = Mat(new Color(0.42f, 0.26f, 0.15f), 0.35f);
-            darkWood = Mat(new Color(0.25f, 0.15f, 0.08f), 0.3f);
+            wood = Mat(new Color(0.55f, 0.34f, 0.18f), 0.25f);
+            darkWood = Mat(new Color(0.30f, 0.18f, 0.10f), 0.2f);
+            felt = Mat(new Color(0.09f, 0.27f, 0.18f), 0.02f);
             cardBack = Mat(new Color(0.45f, 0.11f, 0.09f), 0.3f);
+            var back = Resources.Load<Texture2D>("Cards/back");
+            cardBackTex = back != null ? TexMat(back) : cardBack;
+            string[] faces = { "king", "queen", "ace", "joker" };
+            for (var i = 0; i < 4; i++)
+            {
+                var t = Resources.Load<Texture2D>("Cards/" + faces[i]);
+                cardFaces[i] = t != null ? TexMat(t) : Mat(Ui.RankColor((Rank)i));
+            }
 
             BuildCamera();
-            BuildRoom();
-            BuildTable();
+            if (Props.Available) BuildTavern();
+            else BuildPrimitiveRoom();
             BuildGun();
+            BuildTable(0);
+            blood = Mat(new Color(0.42f, 0.02f, 0.02f), 0.75f);
+        }
+
+        Material TexMat(Texture2D t)
+        {
+            var m = Mat(Color.white, 0.25f);
+            m.mainTexture = t;
+            return m;
         }
 
         void BuildCamera()
         {
-            foreach (var c in FindObjectsOfType<Camera>()) c.gameObject.SetActive(false);
-            foreach (var l in FindObjectsOfType<Light>()) l.gameObject.SetActive(false);
+            foreach (var c in FindObjectsByType<Camera>(FindObjectsSortMode.None)) c.gameObject.SetActive(false);
+            foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None)) l.gameObject.SetActive(false);
             var go = new GameObject("TableCamera");
             go.transform.SetParent(transform, false);
             Cam = go.AddComponent<Camera>();
             Cam.clearFlags = CameraClearFlags.SolidColor;
-            Cam.backgroundColor = new Color(0.05f, 0.03f, 0.02f);
-            Cam.fieldOfView = 74;
+            Cam.backgroundColor = new Color(0.04f, 0.025f, 0.02f);
+            Cam.fieldOfView = 60;
             Cam.nearClipPlane = 0.05f;
             Cam.farClipPlane = 40;
             go.AddComponent<AudioListener>();
 
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.42f, 0.33f, 0.26f);
+            RenderSettings.ambientLight = new Color(0.44f, 0.33f, 0.26f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogDensity = 0.055f;
+            RenderSettings.fogDensity = 0.045f;
             RenderSettings.fogColor = new Color(0.05f, 0.03f, 0.02f);
         }
 
-        void BuildRoom()
+        /// <summary>Taverne en pierre construite avec le pack KayKit Dungeon Remastered.</summary>
+        void BuildTavern()
         {
-            var floor = Prim(PrimitiveType.Plane, world, Vector3.zero, new Vector3(1.4f, 1, 1.4f), Mat(new Color(0.33f, 0.21f, 0.12f), 0.2f), false);
-            floor.name = "Floor";
-            var brick = Mat(new Color(0.36f, 0.14f, 0.10f), 0.05f);
-            const float h = 4.2f;
-            Prim(PrimitiveType.Cube, world, new Vector3(0, h / 2, 5), new Vector3(10, h, 0.2f), brick, false);
-            Prim(PrimitiveType.Cube, world, new Vector3(0, h / 2, -5), new Vector3(10, h, 0.2f), brick, false);
-            Prim(PrimitiveType.Cube, world, new Vector3(-5, h / 2, 0), new Vector3(0.2f, h, 10), brick, false);
-            Prim(PrimitiveType.Cube, world, new Vector3(5, h / 2, 0), new Vector3(0.2f, h, 10), brick, false);
-            Prim(PrimitiveType.Cube, world, new Vector3(0, h, 0), new Vector3(10, 0.1f, 10), Mat(new Color(0.08f, 0.05f, 0.03f)), false);
+            var tile = 4 * Props.F;
+            var half = 1.5f * tile;
+            for (var i = -1; i <= 1; i++)
+            for (var j = -1; j <= 1; j++)
+                Props.Spawn((i + j) % 2 == 0 ? "floor_wood_large" : "floor_wood_large_dark", world, new Vector3(i * tile, 0, j * tile), 0, 1, false);
 
-            // Comptoir et bouteilles au fond.
-            Prim(PrimitiveType.Cube, world, new Vector3(0, 0.55f, 4.4f), new Vector3(5, 1.1f, 0.7f), darkWood);
-            Prim(PrimitiveType.Cube, world, new Vector3(0, 1.13f, 4.4f), new Vector3(5.2f, 0.08f, 0.85f), wood);
-            Color[] glass =
+            // Murs : le décor (étagères, fenêtre) est tourné vers l'intérieur.
+            void Wall(string name, Vector3 pos)
             {
-                new Color(0.18f, 0.42f, 0.23f), new Color(0.48f, 0.23f, 0.07f), new Color(0.61f, 0.48f, 0.16f),
-                new Color(0.23f, 0.16f, 0.36f), new Color(0.42f, 0.12f, 0.12f), new Color(0.16f, 0.31f, 0.42f),
-            };
-            var glassMats = glass.Select(c => Mat(c, 0.8f)).ToArray();
-            for (var shelf = 0; shelf < 2; shelf++)
+                var w = Props.Spawn(name, world, pos, 0, 1, false);
+                if (w == null) return;
+                var inward = -pos;
+                inward.y = 0;
+                if (Mathf.Abs(pos.x) > Mathf.Abs(pos.z)) w.rotation = Quaternion.Euler(0, 90, 0);
+                if (name != "wall") Props.FaceBulk(w, inward);
+            }
+            for (var i = -1; i <= 1; i++)
             {
-                Prim(PrimitiveType.Cube, world, new Vector3(0, 1.9f + shelf * 0.62f, 4.82f), new Vector3(4.4f, 0.05f, 0.3f), darkWood, false);
-                for (var i = 0; i < 16; i++)
-                {
-                    var bh = 0.28f + ((i * 7 + shelf * 3) % 5) * 0.03f;
-                    var m = glassMats[(i * 7 + shelf * 3) % glassMats.Length];
-                    var x = -2.05f + i * 0.27f;
-                    var y = 1.93f + shelf * 0.62f;
-                    Prim(PrimitiveType.Cylinder, world, new Vector3(x, y + bh / 2, 4.82f), new Vector3(0.1f, bh / 2, 0.1f), m, false);
-                    Prim(PrimitiveType.Cylinder, world, new Vector3(x, y + bh + 0.05f, 4.82f), new Vector3(0.035f, 0.05f, 0.035f), m, false);
-                }
+                Wall(i == 0 ? "wall_shelves" : "wall_pillar", new Vector3(i * tile, 0, half));
+                Wall(i == 0 ? "wall_window_closed" : "wall", new Vector3(i * tile, 0, -half));
+                Wall(i == 0 ? "wall_shelves" : "wall", new Vector3(half, 0, i * tile));
+                Wall(i == 0 ? "wall_window_closed" : "wall", new Vector3(-half, 0, i * tile));
+            }
+            Prim(PrimitiveType.Cube, world, new Vector3(0, tile + 0.05f, 0), new Vector3(3 * tile, 0.1f, 3 * tile), Mat(new Color(0.07f, 0.045f, 0.03f)), false);
+
+
+            // Décor : tonneaux, fûts, caisses, bannières, torches.
+            Props.Spawn("barrel_large", world, new Vector3(half - 0.75f, 0, half - 0.75f), 15);
+            Props.Spawn("barrel_small_stack", world, new Vector3(-half + 0.8f, 0, -half + 0.6f), 90);
+            Props.Spawn("keg", world, new Vector3(-half + 0.8f, 0, half - 0.8f), 180);
+            Props.Spawn("crates_stacked", world, new Vector3(half - 0.8f, 0, -half + 0.85f), -20);
+            Props.Spawn("barrel_small", world, new Vector3(-half + 0.5f, 0, 1.3f), 0);
+            Props.Spawn("stool", world, new Vector3(half - 0.55f, 0, 1.4f), 30);
+            foreach (var side in new[] { -1f, 1f })
+            {
+                var x = side * (half - 0.32f);
+                var torch = Props.Spawn("torch_mounted", world, new Vector3(x, 1.25f, -0.9f), 0, 1);
+                if (torch != null) Props.FaceBulk(torch, new Vector3(-side, 0, 0));
+                Flame(new Vector3(x - side * 0.25f, 1.65f, -0.9f), 2.6f, 7f, false);
+                var banner = Props.Spawn("banner_patternA_red", world, new Vector3(side * (half - 0.32f), 0.4f, 1.1f), 0, 0.7f, false);
+                if (banner != null) Props.FaceBulk(banner, new Vector3(-side, 0, 0));
             }
 
-            // Enseigne lumineuse.
-            var font = Font.CreateDynamicFontFromOSFont(new[] { "Arial", "Helvetica", "Roboto", "DejaVu Sans" }, 64);
-            if (font != null)
-            {
-                var sign = new GameObject("Sign");
-                sign.transform.SetParent(world, false);
-                sign.transform.localPosition = new Vector3(0, 3.35f, 4.85f);
-                sign.transform.localScale = Vector3.one * 0.05f;
-                var tm = sign.AddComponent<TextMesh>();
-                tm.font = font;
-                tm.text = "MENTEUR";
-                tm.fontSize = 64;
-                tm.fontStyle = FontStyle.Bold;
-                tm.anchor = TextAnchor.MiddleCenter;
-                tm.color = new Color(1f, 0.55f, 0.45f);
-                sign.GetComponent<MeshRenderer>().sharedMaterial = font.material;
-            }
-            AddLight(world, new Vector3(0, 3.2f, 4.3f), new Color(1f, 0.3f, 0.22f), 2.2f, 6, LightType.Point);
-            AddLight(world, new Vector3(-4.6f, 2.6f, 0), new Color(1f, 0.66f, 0.38f), 1.4f, 7, LightType.Point);
-            AddLight(world, new Vector3(4.6f, 2.6f, 0), new Color(1f, 0.66f, 0.38f), 1.4f, 7, LightType.Point);
+            // Lumière principale au-dessus de la table (ombres).
+            var key = AddLight(world, new Vector3(0, 3.0f, -0.3f), new Color(1f, 0.86f, 0.66f), 3.2f, 8, LightType.Spot);
+            key.spotAngle = 85;
+            key.transform.rotation = Quaternion.LookRotation(new Vector3(0, -1, 0.12f));
+            key.shadows = LightShadows.Soft;
+            key.shadowStrength = 0.75f;
+            var fill = AddLight(world, Vector3.zero, new Color(1f, 0.78f, 0.6f), 0.45f, 0, LightType.Directional);
+            fill.transform.rotation = Quaternion.LookRotation(new Vector3(0.2f, -0.6f, 1f));
+            // Lumière chaude de face, pour bien voir les visages des adversaires.
+            AddLight(world, new Vector3(0, 1.7f, -0.9f), new Color(1f, 0.74f, 0.5f), 1.1f, 4.5f, LightType.Point);
+            // Contre-jour orangé derrière la table : détache les silhouettes du fond.
+            AddLight(world, new Vector3(0, 2.2f, 2.6f), new Color(1f, 0.55f, 0.28f), 1.6f, 5f, LightType.Point);
+        }
 
-            // Lampe suspendue : la lumière principale.
-            lamp = new GameObject("Lamp").transform;
-            lamp.SetParent(world, false);
-            lamp.localPosition = new Vector3(0, h, 0);
-            var black = Mat(new Color(0.03f, 0.03f, 0.03f));
-            Prim(PrimitiveType.Cylinder, lamp, new Vector3(0, -0.72f, 0), new Vector3(0.016f, 0.72f, 0.016f), black, false);
-            Prim(PrimitiveType.Sphere, lamp, new Vector3(0, -1.52f, 0), new Vector3(0.7f, 0.26f, 0.7f), Mat(new Color(0.10f, 0.22f, 0.15f), 0.5f), false);
-            var spot = AddLight(lamp, new Vector3(0, -1.7f, 0), new Color(1f, 0.85f, 0.63f), 3.2f, 9, LightType.Spot);
-            spot.spotAngle = 118;
-            spot.transform.localRotation = Quaternion.Euler(90, 0, 0);
-            spot.shadows = LightShadows.Soft;
-            spot.shadowStrength = 0.7f;
-            // Lumière d'appoint depuis la caméra pour lire les visages.
-            var fill = AddLight(world, Vector3.zero, new Color(1f, 0.82f, 0.66f), 0.55f, 0, LightType.Directional);
-            fill.transform.rotation = Quaternion.LookRotation(new Vector3(0, -0.5f, 1f));
+        /// <summary>Table ronde (0) ou longue (1), avec tapis, bougies et bouteilles.</summary>
+        void BuildTable(int style)
+        {
+            if (tableGroup != null) Destroy(tableGroup.gameObject);
+            tableGroup = new GameObject("TableGroup").transform;
+            tableGroup.SetParent(world, false);
+            tableStyle = style;
+            var parent = tableGroup;
+            if (style == 0)
+            {
+                Pile = new Vector3(0, TableY + 0.012f, 0.0f);
+                GunRest = new Vector3(0.28f, TableY + 0.035f, -0.5f);
+                if (Props.Spawn("table_round_A", parent, Vector3.zero) == null)
+                    Prim(PrimitiveType.Cylinder, parent, new Vector3(0, TableY - 0.04f, 0), new Vector3(RoundRadius * 2, 0.04f, RoundRadius * 2), wood);
+                Prim(PrimitiveType.Cylinder, parent, new Vector3(0, TableY + 0.004f, 0), new Vector3(1.1f, 0.003f, 1.1f), felt, false);
+                Props.Spawn("candle_triple", parent, new Vector3(0.36f, TableY, 0.3f), 20, 0.3f);
+                Props.Spawn("candle_lit", parent, new Vector3(-0.42f, TableY, 0.12f), 0, 0.3f);
+                Props.Spawn("bottle_A_brown", parent, new Vector3(-0.3f, TableY, 0.45f), 0, 0.33f);
+                Flame(parent, new Vector3(0.36f, TableY + 0.28f, 0.3f), 2.0f, 3.5f, true);
+                Flame(parent, new Vector3(-0.42f, TableY + 0.28f, 0.12f), 1.6f, 3.5f, false);
+            }
+            else
+            {
+                Pile = new Vector3(0, TableY + 0.012f, 0.05f);
+                GunRest = new Vector3(0.22f, TableY + 0.035f, -0.62f);
+                if (Props.Spawn("table_long", parent, Vector3.zero) == null)
+                    Prim(PrimitiveType.Cube, parent, new Vector3(0, TableY - 0.04f, 0), new Vector3(TableW, 0.08f, TableL), wood);
+                Prim(PrimitiveType.Cube, parent, new Vector3(0, TableY + 0.004f, 0.05f), new Vector3(TableW * 0.66f, 0.006f, TableL * 0.62f), felt, false);
+                Props.Spawn("candle_triple", parent, new Vector3(0.42f, TableY, 0.8f), 20, 0.32f);
+                Props.Spawn("candle_lit", parent, new Vector3(-0.42f, TableY, -0.85f), 0, 0.32f);
+                Props.Spawn("bottle_A_brown", parent, new Vector3(-0.46f, TableY, 0.88f), 0, 0.35f);
+                Props.Spawn("bottle_B_green", parent, new Vector3(0.46f, TableY, -0.95f), 0, 0.32f);
+                Flame(parent, new Vector3(0.42f, TableY + 0.3f, 0.8f), 2.0f, 3.5f, true);
+                Flame(parent, new Vector3(-0.42f, TableY + 0.3f, -0.85f), 1.6f, 3.5f, false);
+            }
+            if (gunHolder == null)
+            {
+                gun.position = GunRest;
+                gun.rotation = GunRestRot;
+            }
+        }
+
+        /// <summary>Hauteur de la surface sous un point (plateau de la table ou sol).</summary>
+        float SurfaceAt(Vector3 p)
+        {
+            var onTable = tableStyle == 0
+                ? new Vector2(p.x, p.z).magnitude < RoundRadius - 0.02f
+                : Mathf.Abs(p.x) < TableW / 2 - 0.02f && Mathf.Abs(p.z) < TableL / 2 - 0.02f;
+            return onTable ? TableY + 0.006f : 0.005f;
+        }
+
+        void Flame(Vector3 pos, float intensity, float range, bool shadows) => Flame(world, pos, intensity, range, shadows);
+
+        void Flame(Transform parent, Vector3 pos, float intensity, float range, bool shadows)
+        {
+            var l = AddLight(parent, pos, new Color(1f, 0.62f, 0.32f), intensity, range, LightType.Point);
+            if (shadows) l.shadows = LightShadows.Soft;
+            flames.Add(l);
+            flameBase.Add(intensity);
+        }
+
+        /// <summary>Décor de secours, en formes simples (si les accessoires manquent).</summary>
+        void BuildPrimitiveRoom()
+        {
+            Prim(PrimitiveType.Plane, world, Vector3.zero, new Vector3(1.4f, 1, 1.4f), Mat(new Color(0.33f, 0.21f, 0.12f), 0.2f), false);
+            var stone = Mat(new Color(0.28f, 0.24f, 0.22f), 0.05f);
+            const float h = 3.5f;
+            Prim(PrimitiveType.Cube, world, new Vector3(0, h / 2, 4), new Vector3(8, h, 0.2f), stone, false);
+            Prim(PrimitiveType.Cube, world, new Vector3(0, h / 2, -4), new Vector3(8, h, 0.2f), stone, false);
+            Prim(PrimitiveType.Cube, world, new Vector3(-4, h / 2, 0), new Vector3(0.2f, h, 8), stone, false);
+            Prim(PrimitiveType.Cube, world, new Vector3(4, h / 2, 0), new Vector3(0.2f, h, 8), stone, false);
+            Prim(PrimitiveType.Cylinder, world, new Vector3(0, (TableY - 0.08f) / 2, 0), new Vector3(0.18f, (TableY - 0.08f) / 2, 0.18f), darkWood);
+            var key = AddLight(world, new Vector3(0, 3.0f, -0.3f), new Color(1f, 0.86f, 0.66f), 2.2f, 8, LightType.Spot);
+            key.spotAngle = 80;
+            key.transform.rotation = Quaternion.LookRotation(Vector3.down);
+            key.shadows = LightShadows.Soft;
         }
 
         Light AddLight(Transform parent, Vector3 pos, Color color, float intensity, float range, LightType type)
@@ -262,59 +368,70 @@ namespace Menteur.Game
             return l;
         }
 
-        void BuildTable()
-        {
-            var felt = Mat(new Color(0.10f, 0.30f, 0.21f), 0.02f);
-            // Plateau : un rectangle et deux demi-cercles aux extrémités.
-            var mid = TableL - TableW;
-            Prim(PrimitiveType.Cube, world, new Vector3(0, TableY - 0.04f, 0), new Vector3(TableW, 0.08f, mid), wood);
-            Prim(PrimitiveType.Cylinder, world, new Vector3(0, TableY - 0.04f, mid / 2), new Vector3(TableW, 0.04f, TableW), wood);
-            Prim(PrimitiveType.Cylinder, world, new Vector3(0, TableY - 0.04f, -mid / 2), new Vector3(TableW, 0.04f, TableW), wood);
-            const float inset = 0.16f;
-            Prim(PrimitiveType.Cube, world, new Vector3(0, TableY + 0.003f, 0), new Vector3(TableW - inset, 0.012f, mid), felt, false);
-            Prim(PrimitiveType.Cylinder, world, new Vector3(0, TableY + 0.003f, mid / 2), new Vector3(TableW - inset, 0.006f, TableW - inset), felt, false);
-            Prim(PrimitiveType.Cylinder, world, new Vector3(0, TableY + 0.003f, -mid / 2), new Vector3(TableW - inset, 0.006f, TableW - inset), felt, false);
-            foreach (var x in new[] { -0.45f, 0.45f })
-            foreach (var z in new[] { -1.15f, 1.15f })
-                Prim(PrimitiveType.Cylinder, world, new Vector3(x, (TableY - 0.08f) / 2, z), new Vector3(0.09f, (TableY - 0.08f) / 2, 0.09f), darkWood);
-        }
-
         void BuildGun()
         {
             gun = new GameObject("Revolver").transform;
             gun.SetParent(world, false);
-            var metal = Mat(new Color(0.38f, 0.40f, 0.43f), 0.7f);
-            var dark = Mat(new Color(0.14f, 0.15f, 0.17f), 0.6f);
+            var steel = Mat(new Color(0.20f, 0.21f, 0.23f), 0.75f);
+            if (steel.HasProperty("_Metallic")) steel.SetFloat("_Metallic", 0.85f);
+            var black = Mat(new Color(0.08f, 0.08f, 0.09f), 0.6f);
+            var walnut = Mat(new Color(0.36f, 0.18f, 0.08f), 0.45f);
             // Canon le long de +Z (pratique avec LookRotation).
-            var barrel = Prim(PrimitiveType.Cylinder, gun, new Vector3(0, 0.02f, 0.12f), new Vector3(0.028f, 0.1f, 0.028f), metal);
+            var barrel = Prim(PrimitiveType.Cylinder, gun, new Vector3(0, 0.018f, 0.135f), new Vector3(0.022f, 0.085f, 0.022f), steel);
             barrel.localRotation = Quaternion.Euler(90, 0, 0);
-            Prim(PrimitiveType.Cube, gun, new Vector3(0, 0.01f, -0.01f), new Vector3(0.035f, 0.06f, 0.1f), dark);
-            drum = Prim(PrimitiveType.Cylinder, gun, new Vector3(0, 0.008f, 0.01f), new Vector3(0.066f, 0.03f, 0.066f), metal);
+            Prim(PrimitiveType.Cube, gun, new Vector3(0, 0.032f, 0.135f), new Vector3(0.008f, 0.008f, 0.17f), black);
+            Prim(PrimitiveType.Cube, gun, new Vector3(0, 0.035f, 0.215f), new Vector3(0.006f, 0.012f, 0.008f), black);
+            Prim(PrimitiveType.Cube, gun, new Vector3(0, 0.012f, -0.005f), new Vector3(0.03f, 0.05f, 0.085f), steel);
+            drum = Prim(PrimitiveType.Cylinder, gun, new Vector3(0, 0.01f, 0.015f), new Vector3(0.058f, 0.026f, 0.058f), steel);
             drum.localRotation = Quaternion.Euler(90, 0, 0);
             for (var i = 0; i < 6; i++)
             {
                 var a = i * Mathf.PI / 3;
-                Prim(PrimitiveType.Cylinder, drum, new Vector3(Mathf.Cos(a) * 0.3f, 0, Mathf.Sin(a) * 0.3f), new Vector3(0.24f, 1.03f, 0.24f), dark, false);
+                Prim(PrimitiveType.Cylinder, drum, new Vector3(Mathf.Cos(a) * 0.3f, 0, Mathf.Sin(a) * 0.3f), new Vector3(0.22f, 1.04f, 0.22f), black, false);
             }
-            var grip = Prim(PrimitiveType.Cube, gun, new Vector3(0, -0.055f, -0.06f), new Vector3(0.03f, 0.1f, 0.045f), Mat(new Color(0.42f, 0.23f, 0.10f), 0.4f));
-            grip.localRotation = Quaternion.Euler(-20, 0, 0);
+            var grip = Prim(PrimitiveType.Cube, gun, new Vector3(0, -0.045f, -0.058f), new Vector3(0.026f, 0.085f, 0.04f), walnut);
+            grip.localRotation = Quaternion.Euler(-22, 0, 0);
+            var guard = Prim(PrimitiveType.Cube, gun, new Vector3(0, -0.026f, 0.012f), new Vector3(0.006f, 0.006f, 0.05f), black);
+            guard.localRotation = Quaternion.Euler(10, 0, 0);
+            Prim(PrimitiveType.Cube, gun, new Vector3(0, -0.018f, 0.005f), new Vector3(0.004f, 0.022f, 0.004f), black);
+            var hammer = Prim(PrimitiveType.Cube, gun, new Vector3(0, 0.04f, -0.05f), new Vector3(0.008f, 0.02f, 0.012f), black);
+            hammer.localRotation = Quaternion.Euler(-30, 0, 0);
             muzzle = AddLight(gun, new Vector3(0, 0.02f, 0.26f), new Color(1f, 0.7f, 0.38f), 0, 4, LightType.Point);
-            gun.localScale = Vector3.one * 1.6f;
+            gun.localScale = Vector3.one * 1.3f;
             gun.position = GunRest;
             gun.rotation = GunRestRot;
         }
 
+        /// <summary>Carte posée à plat, face cachée (dos visible vers le haut).</summary>
         Transform NewCard(Vector3 pos, Quaternion rot, float scale = 1f)
         {
-            var c = Prim(PrimitiveType.Cube, world, Vector3.zero, new Vector3(0.105f, 0.004f, 0.15f) * scale, cardBack);
+            var c = new GameObject("Card").transform;
+            c.SetParent(world, false);
+            c.localScale = Vector3.one * scale;
+            var size = new Vector3(0.088f, 0.128f, 1);
+            // Quad visible côté -Z ; tourné de 90° autour de X il regarde vers le haut.
+            var up = Prim(PrimitiveType.Quad, c, new Vector3(0, 0.0015f, 0), size, cardBackTex);
+            up.localRotation = Quaternion.Euler(90, 0, 0);
+            up.name = "Back";
+            var down = Prim(PrimitiveType.Quad, c, new Vector3(0, -0.0015f, 0), size, cardBack, false);
+            down.localRotation = Quaternion.Euler(-90, 0, 180);
+            down.name = "Face";
             c.position = pos;
             c.rotation = rot;
             return c;
         }
 
+        /// <summary>Donne une face à une carte (pour la révélation).</summary>
+        void SetFace(Transform card, Rank rank)
+        {
+            var face = card.Find("Face");
+            if (face != null) face.GetComponent<Renderer>().sharedMaterial = cardFaces[(int)rank];
+        }
+
         // ----------------------------------------------------------------- sièges
 
-        static string KeyOf(GameView v) => string.Join("|", v.Players.Select(p => p.Id + ":" + p.Skin)) + "#" + v.MyId;
+        static string KeyOf(GameView v) =>
+            string.Join("|", v.Players.Select(p => p.Id + ":" + p.Skin)) + "#" + v.MyId + "#" + v.Settings.Table;
 
         void BuildSeats(GameView v)
         {
@@ -325,38 +442,102 @@ namespace Menteur.Game
             }
             Seats.Clear();
             gunFollow = null;
+            if (v.Settings.Table != tableStyle) BuildTable(v.Settings.Table);
             var ids = v.Players.Select(p => p.Id).ToList();
             var me = Mathf.Max(0, ids.IndexOf(v.MyId));
             var others = ids.Skip(me + 1).Concat(ids.Take(me)).Where(id => id != v.MyId).ToList();
-            var order = SlotOrder[Mathf.Min(5, others.Count)];
-            for (var i = 0; i < others.Count && i < order.Length; i++)
+            var places = new List<Vector3>();
+            if (tableStyle == 0)
             {
-                var slot = Slots[order[i]];
+                // Table ronde : tout le monde en cercle, moi en bas (côté -Z).
+                var n = others.Count + 1;
+                mySeat = new Vector3(0, 0, -RoundSeat);
+                for (var i = 1; i < n; i++)
+                {
+                    var a = i * 2 * Mathf.PI / n;
+                    places.Add(new Vector3(-Mathf.Sin(a) * RoundSeat, 0, -Mathf.Cos(a) * RoundSeat));
+                }
+            }
+            else
+            {
+                mySeat = new Vector3(0, 0, -TableL / 2 - 0.4f);
+                foreach (var name in SlotOrder[Mathf.Min(5, others.Count)])
+                {
+                    var slot = Slots[name];
+                    places.Add(new Vector3(slot.x, 0, slot.y));
+                }
+            }
+            for (var i = 0; i < others.Count && i < places.Count; i++)
+            {
+                var pos = places[i];
                 var player = v.Player(others[i]);
                 var root = new GameObject("Seat-" + others[i]).transform;
                 root.SetParent(world, false);
-                root.position = new Vector3(slot.x, 0, slot.y);
-                var toward = new Vector3(slot.z - slot.x, 0, slot.w - slot.y).normalized;
+                root.position = pos;
+                var toward = tableStyle == 0 || pos.x == 0 ? new Vector3(-pos.x, 0, -pos.z).normalized : new Vector3(-Mathf.Sign(pos.x), 0, 0);
                 root.rotation = Quaternion.LookRotation(toward);
-                BuildChair(root);
+                var chair = BuildChair(root);
                 var rig = CharacterRig.Create(player.Skin, root, wood);
-                Seats[others[i]] = new SeatView
+                var stack = tableStyle == 0
+                    ? toward * -0.56f
+                    : new Vector3(pos.x, 0, pos.z) + toward * (pos.x == 0 ? 0.62f : 0.5f);
+                var seat = new SeatView
                 {
                     Id = others[i], Root = root, Rig = rig, Toward = toward,
-                    StackPos = new Vector3(slot.x, TableY + 0.014f, slot.y) + toward * (slot.x == 0 ? 0.62f : 0.42f),
+                    StackPos = new Vector3(stack.x, TableY + 0.008f, stack.z),
                     NextFidget = Time.time + 4 + UnityEngine.Random.value * 8,
                 };
+                Seats[others[i]] = seat;
+                if (chair != null) StartCoroutine(FitOnChair(rig, chair));
             }
             seatKey = KeyOf(v);
         }
 
-        void BuildChair(Transform root)
+        /// <summary>
+        /// Cale le bassin du personnage sur l'assise de sa chaise (mesurée sur le maillage),
+        /// une fois la pose assise appliquée.
+        /// </summary>
+        System.Collections.IEnumerator FitOnChair(CharacterRig rig, Transform chair)
         {
-            Prim(PrimitiveType.Cube, root, new Vector3(0, 0.47f, -0.05f), new Vector3(0.5f, 0.05f, 0.45f), darkWood);
-            Prim(PrimitiveType.Cube, root, new Vector3(0, 0.8f, -0.28f), new Vector3(0.5f, 0.6f, 0.05f), darkWood);
-            foreach (var x in new[] { -0.21f, 0.21f })
-            foreach (var z in new[] { -0.25f, 0.15f })
-                Prim(PrimitiveType.Cube, root, new Vector3(x, 0.235f, z), new Vector3(0.04f, 0.47f, 0.04f), darkWood, false);
+            yield return null;
+            yield return null;
+            if (rig == null || chair == null || rig.Hips == null) yield break;
+            var b = Props.Bounds(chair);
+            var cut = b.min.y + b.size.y * 0.6f;
+            var seatTop = float.MinValue;
+            foreach (var mf in chair.GetComponentsInChildren<MeshFilter>())
+            {
+                var mesh = mf.sharedMesh;
+                if (mesh == null || !mesh.isReadable) continue;
+                foreach (var vtx in mesh.vertices)
+                {
+                    var w = mf.transform.TransformPoint(vtx);
+                    if (w.y < cut && w.y > seatTop) seatTop = w.y;
+                }
+            }
+            if (seatTop == float.MinValue) seatTop = b.min.y + b.size.y * 0.42f;
+            var seatCenter = new Vector3(b.center.x, seatTop, b.center.z);
+            var hips = rig.Hips.position;
+            var fwd = rig.transform.forward;
+            var dy = Mathf.Clamp(seatTop + 0.06f - hips.y, -0.4f, 0.4f);
+            var dz = Mathf.Clamp(Vector3.Dot(seatCenter - hips, fwd) - 0.03f, -0.25f, 0.25f);
+            rig.transform.position += Vector3.up * dy + fwd * dz;
+        }
+
+        Transform BuildChair(Transform root)
+        {
+            var chair = Props.Spawn("chair", root, Vector3.zero);
+            if (chair != null)
+            {
+                Props.FaceUpperPart(chair, -root.forward);
+                return chair;
+            }
+            Prim(PrimitiveType.Cube, root, new Vector3(0, 0.33f, -0.05f), new Vector3(0.42f, 0.05f, 0.4f), darkWood);
+            Prim(PrimitiveType.Cube, root, new Vector3(0, 0.6f, -0.24f), new Vector3(0.42f, 0.52f, 0.05f), darkWood);
+            foreach (var x in new[] { -0.18f, 0.18f })
+            foreach (var z in new[] { -0.22f, 0.12f })
+                Prim(PrimitiveType.Cube, root, new Vector3(x, 0.165f, z), new Vector3(0.04f, 0.33f, 0.04f), darkWood, false);
+            return null;
         }
 
         /// <summary>Cartes en main, posées face cachée devant le joueur.</summary>
@@ -373,8 +554,8 @@ namespace Menteur.Game
             while (s.Stack.Count < n)
             {
                 var i = s.Stack.Count;
-                var pos = s.StackPos + right * ((i - 2) * 0.034f) + Vector3.up * (0.004f * i);
-                s.Stack.Add(NewCard(pos, yaw * Quaternion.Euler(0, (i - 2) * 7f, 0), 0.8f));
+                var pos = s.StackPos + right * ((i - 2) * 0.03f) + Vector3.up * (0.003f * i);
+                s.Stack.Add(NewCard(pos, yaw * Quaternion.Euler(0, (i - 2) * 9f, 0), 0.85f));
             }
         }
 
@@ -382,7 +563,7 @@ namespace Menteur.Game
 
         void PilePose(int i, out Vector3 pos, out Quaternion rot)
         {
-            pos = Pile + new Vector3(Mathf.Cos(i * 2.4f) * 0.07f, 0.004f * i, Mathf.Sin(i * 2.4f) * 0.07f);
+            pos = Pile + new Vector3(Mathf.Cos(i * 2.4f) * 0.05f, 0.0035f * i, Mathf.Sin(i * 2.4f) * 0.05f);
             rot = Quaternion.Euler(0, (i * 67) % 80 - 40, 0);
         }
 
@@ -511,11 +692,90 @@ namespace Menteur.Game
             }
             else if (seat != null)
             {
+                Blood(seat);
                 seat.Rig.Die();
                 gunFollow = null;
                 gunHolder = null;
                 // Le revolver tombe sur la table.
                 MoveTo(gun, GunRest, GunRestRot, 0.5f, 0.15f, 0.1f);
+            }
+        }
+
+        /// <summary>Giclée de sang côté opposé au revolver, puis flaque sous la tête.</summary>
+        void Blood(SeatView seat)
+        {
+            var head = seat.Rig.HeadCenter;
+            var away = -(seat.Rig.GunHand - head);
+            away.y = 0;
+            away = away.sqrMagnitude > 1e-4f ? away.normalized : seat.Root.right;
+            for (var i = 0; i < 34; i++)
+            {
+                var d = Prim(PrimitiveType.Sphere, world, head, Vector3.one * UnityEngine.Random.Range(0.018f, 0.04f), blood, false);
+                var spread = UnityEngine.Random.insideUnitSphere * 0.9f;
+                drops.Add(new Drop
+                {
+                    T = d,
+                    V = (away * UnityEngine.Random.Range(1.2f, 2.8f) + Vector3.up * UnityEngine.Random.Range(0.4f, 1.8f) + spread),
+                });
+            }
+            // Flaque qui s'étend là où la tête retombe (devant le joueur, sur la table).
+            var pool = Prim(PrimitiveType.Cylinder, world, Vector3.zero, Vector3.zero, blood, false);
+            var p = seat.Root.position + seat.Toward * 0.42f;
+            p.y = SurfaceAt(p) + 0.002f;
+            pool.position = p;
+            Run(2.2f, e =>
+            {
+                if (pool != null) pool.localScale = new Vector3(0.34f * e, 0.002f, 0.28f * e);
+            }, 0.7f, true);
+        }
+
+        void UpdateDrops(float dt)
+        {
+            foreach (var d in drops)
+            {
+                if (d.Landed || d.T == null) continue;
+                d.V += Vector3.down * 9.8f * dt;
+                var p = d.T.position + d.V * dt;
+                var floor = SurfaceAt(p);
+                if (p.y <= floor)
+                {
+                    // La goutte s'écrase et laisse une tache.
+                    d.Landed = true;
+                    p.y = floor + 0.001f;
+                    var size = d.T.localScale.x * UnityEngine.Random.Range(1.6f, 2.8f);
+                    d.T.localScale = new Vector3(size, 0.0015f, size * UnityEngine.Random.Range(0.8f, 1.6f));
+                    d.T.rotation = Quaternion.Euler(0, UnityEngine.Random.value * 360, 0);
+                }
+                d.T.position = p;
+            }
+        }
+
+        /// <summary>Le joueur fait glisser la vue (dx, dy en pixels virtuels).</summary>
+        public void Look(float dx, float dy)
+        {
+            lookYaw = Mathf.Clamp(lookYaw + dx * 0.25f, -95, 95);
+            lookPitch = Mathf.Clamp(lookPitch + dy * 0.2f, -25, 30);
+            lastManualLook = Time.time;
+        }
+
+        void PlayEmote(SeatView s, int emote)
+        {
+            switch (emote)
+            {
+                case 0:
+                    s.Rig.Gesture("Unarmed_Melee_Attack_Punch_A", speed: 1.1f);
+                    After(0.35f, () => shake = Mathf.Max(shake, 0.012f));
+                    break;
+                case 1:
+                    s.Rig.Gesture("Cheer", speed: 1.1f);
+                    break;
+                case 2:
+                    s.Rig.Gesture("1H_Ranged_Aiming", hold: true);
+                    After(1.8f, () => s.Rig.ToIdle());
+                    break;
+                case 3:
+                    s.Rig.BrasDHonneur();
+                    break;
             }
         }
 
@@ -529,6 +789,14 @@ namespace Menteur.Game
                 return;
             }
             var rebuilt = KeyOf(v) != seatKey;
+            // Gestes des autres joueurs (on ne rejoue pas les anciens à la première synchro).
+            foreach (var e in v.Emotes)
+            {
+                emoteSeen.TryGetValue(e.Key, out var seen);
+                if (e.Value.Value <= seen) continue;
+                emoteSeen[e.Key] = e.Value.Value;
+                if (prev != null && !rebuilt && Seats.TryGetValue(e.Key, out var es) && !es.Rig.Dead) PlayEmote(es, e.Value.Key);
+            }
             if (rebuilt) BuildSeats(v);
             var newRound = prev == null || rebuilt || v.Round != prev.Round;
             if (newRound)
@@ -596,10 +864,12 @@ namespace Menteur.Game
                 }
                 // Les cartes contestées se soulèvent du tas.
                 var taken = pile.Skip(Mathf.Max(0, pile.Count - r.Cards.Count)).ToList();
-                for (var i = 0; i < taken.Count; i++)
+                for (var i = 0; i < taken.Count && i < r.Cards.Count; i++)
                 {
-                    var x = (i - (taken.Count - 1) / 2f) * 0.14f;
-                    MoveTo(taken[i], Pile + new Vector3(x, 0.22f, -0.1f), Quaternion.Euler(-55, 0, 0), 0.6f, 0.15f + i * 0.25f);
+                    SetFace(taken[i], r.Cards[i].Rank);
+                    var x = (i - (taken.Count - 1) / 2f) * 0.12f;
+                    // Retournée face vers le joueur, légèrement inclinée.
+                    MoveTo(taken[i], Pile + new Vector3(x, 0.2f, -0.25f), Quaternion.Euler(-60, 0, 180), 0.6f, 0.15f + i * 0.25f);
                 }
             }
 
@@ -631,16 +901,62 @@ namespace Menteur.Game
             RunTweens();
             var t = Time.time;
 
-            // Cadrage : plus l'écran est étroit, plus la caméra recule.
+            // Cadrage : assis à ma place ; sur écran étroit, on recule et on monte.
             var halfH = Mathf.Atan(Mathf.Tan(Cam.fieldOfView * Mathf.Deg2Rad / 2) * Cam.aspect);
-            var dist = Mathf.Max(2.2f, 1.15f / Mathf.Tan(halfH));
-            camBase = new Vector3(0, 1.0f + dist * 0.55f, -(0.45f + dist * 0.85f));
+            Vector3 eye, look;
+            if (tableStyle == 0)
+            {
+                var back = Mathf.Max(0, 1.0f / Mathf.Tan(halfH) - 1.6f);
+                var outward = mySeat.sqrMagnitude > 1e-4f ? mySeat.normalized : Vector3.back;
+                eye = mySeat + outward * (0.22f + back) + Vector3.up * (1.12f + back * 0.45f);
+                look = new Vector3(0, TableY, 0) - outward * 0.25f;
+            }
+            else
+            {
+                var back = Mathf.Max(0, 1.55f / Mathf.Tan(halfH) - 2.35f);
+                eye = new Vector3(0, 1.45f + back * 0.55f, -2.35f - back);
+                look = new Vector3(0, 0.45f, 0.35f);
+            }
+            camBase = eye;
+            CamTarget = look;
+
+            // Regard automatique vers le joueur actif, sauf si on vient de bouger la vue soi-même.
+            if (Time.time - lastManualLook > 3f)
+            {
+                string who = null;
+                if (prev != null) who = prev.Phase == Phase.Roulette ? prev.ShooterId : prev.CurrentId;
+                var want = 0f;
+                if (who != null && Seats.TryGetValue(who, out var ws))
+                {
+                    var baseDir = look - eye;
+                    baseDir.y = 0;
+                    var to = ws.Rig.HeadCenter - eye;
+                    to.y = 0;
+                    want = Mathf.Clamp(Vector3.SignedAngle(baseDir, to, Vector3.up), -80, 80) * 0.85f;
+                }
+                autoYaw = Mathf.Lerp(autoYaw, want, Time.deltaTime * 2.2f);
+                lookYaw = Mathf.Lerp(lookYaw, 0, Time.deltaTime * 2.5f);
+                lookPitch = Mathf.Lerp(lookPitch, 0, Time.deltaTime * 2.5f);
+            }
             shake *= 0.9f;
             var jitter = new Vector3((UnityEngine.Random.value - 0.5f) * shake, (UnityEngine.Random.value - 0.5f) * shake, 0);
             Cam.transform.position = camBase + jitter + Vector3.up * (Mathf.Sin(t * 0.7f) * 0.01f - camDrop);
-            Cam.transform.rotation = Quaternion.LookRotation(CamTarget - Cam.transform.position) * Quaternion.Euler(0, 0, camRoll);
+            var baseRot = Quaternion.LookRotation(CamTarget - camBase);
+            var e2 = baseRot.eulerAngles;
+            Cam.transform.rotation = Quaternion.Euler(e2.x + lookPitch, e2.y + autoYaw + lookYaw, camRoll);
+            UpdateDrops(Time.deltaTime);
 
-            if (lamp != null) lamp.localRotation = Quaternion.Euler(Mathf.Cos(t * 0.45f) * 1.2f, 0, Mathf.Sin(t * 0.6f) * 1.5f);
+            // Les flammes vacillent.
+            for (var i = flames.Count - 1; i >= 0; i--)
+            {
+                if (flames[i] == null)
+                {
+                    flames.RemoveAt(i);
+                    flameBase.RemoveAt(i);
+                    continue;
+                }
+                flames[i].intensity = flameBase[i] * (0.82f + 0.3f * Mathf.PerlinNoise(t * 3.1f + i * 7.3f, i));
+            }
 
             // Les joueurs regardent celui dont c'est le tour (ou le tireur).
             string focus = null;
@@ -684,7 +1000,7 @@ namespace Menteur.Game
         {
             screen = Vector3.zero;
             if (!Seats.TryGetValue(id, out var s)) return false;
-            screen = Cam.WorldToScreenPoint(s.Rig.HeadCenter + Vector3.up * 0.42f);
+            screen = Cam.WorldToScreenPoint(s.Rig.HeadCenter + Vector3.up * 0.36f);
             return screen.z > 0;
         }
     }

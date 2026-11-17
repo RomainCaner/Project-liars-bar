@@ -8,13 +8,23 @@ namespace Menteur.Game
 {
     public sealed class CharacterRig : MonoBehaviour
     {
+        public static bool ModelsInstalled => Resources.Load<GameObject>("Characters/Knight") != null;
+
         public const float Height = 1.49f;
         const float NeckHeight = 0.77f; // hauteur de l'os « head » debout, à l'échelle voulue
         const float HeadUp = 0.148f * Height;
         const float HeadSide = 0.228f * Height;
 
-        static readonly string[] Models = { "Knight", "Barbarian", "Mage", "Rogue", "RogueHooded" };
-        static readonly string[] Textures = { "knight_texture", "barbarian_texture", "mage_texture", "rogue_texture", "rogue_texture" };
+        static readonly string[] Models =
+        {
+            "Knight", "Barbarian", "Mage", "Rogue", "RogueHooded",
+            "Skeleton_Minion", "Skeleton_Warrior", "Skeleton_Rogue", "Skeleton_Mage",
+        };
+        static readonly string[] Textures =
+        {
+            "knight_texture", "barbarian_texture", "mage_texture", "rogue_texture", "rogue_texture",
+            "skeleton_texture", "skeleton_texture", "skeleton_texture", "skeleton_texture",
+        };
         static readonly Regex Props = new Regex("Sword|Shield|Axe|Spellbook|Wand|Staff|Knife|Crossbow|Throwable|Mug");
 
         public bool Animated { get; private set; }
@@ -26,7 +36,10 @@ namespace Menteur.Game
         /// <summary>Rotation de tête souhaitée, en degrés.</summary>
         public float LookYaw;
 
-        Transform model, head, spine, chest, upperR, lowerR, handR, upperL;
+        Transform model, head, spine, chest, upperR, lowerR, handR, upperL, lowerL, handL;
+
+        /// <summary>Os du bassin (pour caler le personnage sur sa chaise).</summary>
+        public Transform Hips { get; private set; }
         Animation anim;
         readonly Dictionary<string, AnimationState> states = new Dictionary<string, AnimationState>();
         readonly HashSet<string> mixed = new HashSet<string>();
@@ -41,8 +54,10 @@ namespace Menteur.Game
             rig.slumpSide = Random.value < 0.5f ? -1 : 1;
             var i = Mathf.Abs(skin) % Models.Length;
             var prefab = Resources.Load<GameObject>("Characters/" + Models[i]);
-            if (prefab != null) rig.BuildModel(prefab, Resources.Load<Texture2D>("Characters/" + Textures[i]));
-            else rig.BuildFallback(fallbackMaterial, i);
+            // Squelettes pas encore téléchargés : on prend un aventurier à la place.
+            if (prefab == null && i >= 5) prefab = Resources.Load<GameObject>("Characters/" + Models[i - 5]);
+            if (prefab != null) rig.BuildModel(prefab, Resources.Load<Texture2D>("Characters/" + Textures[prefab.name.StartsWith("Skeleton") ? i : i % 5]));
+            else rig.BuildFallback(fallbackMaterial, i % 5);
             return rig;
         }
 
@@ -68,6 +83,9 @@ namespace Menteur.Game
             lowerR = B("lowerarm.r");
             handR = B("handslot.r") ?? B("hand.r");
             upperL = B("upperarm.l");
+            lowerL = B("lowerarm.l");
+            handL = B("handslot.l") ?? B("hand.l");
+            Hips = B("hips");
 
             if (texture != null)
             {
@@ -205,6 +223,16 @@ namespace Menteur.Game
             }
         }
 
+        float honourUntil = -1, honourWeight;
+
+        /// <summary>Bras d'honneur : poing levé, l'autre main frappe le pli du coude (fait en cinématique inverse).</summary>
+        public void BrasDHonneur(float duration = 2.2f)
+        {
+            if (Dead) return;
+            ToIdle(0.2f);
+            honourUntil = Time.time + duration;
+        }
+
         public void Die(bool instant = false)
         {
             if (Dead) return;
@@ -252,6 +280,24 @@ namespace Menteur.Game
             {
                 if (chest != null) chest.rotation = Quaternion.AngleAxis(yaw * 0.25f, Vector3.up) * chest.rotation;
                 if (head != null) head.rotation = Quaternion.AngleAxis(yaw * 0.7f, Vector3.up) * head.rotation;
+            }
+
+            var wantHonour = !Dead && Time.time < honourUntil ? 1f : 0f;
+            honourWeight = Mathf.MoveTowards(honourWeight, wantHonour, dt * 5f);
+            if (honourWeight > 0.001f && upperR != null && lowerR != null && handR != null && chest != null)
+            {
+                var fwd = transform.forward;
+                var side = Side;
+                var shoulder = upperR.position;
+                // Poing droit dressé devant l'épaule ; la main gauche vient frapper le coude droit.
+                var fist = shoulder + fwd * (0.16f * Height) + Vector3.up * (0.24f * Height) + side * (0.02f * Height);
+                SolveArm(upperR, lowerR, handR, fist, honourWeight);
+                if (upperL != null && lowerL != null && handL != null)
+                {
+                    var pump = 0.5f + 0.5f * Mathf.Sin(Time.time * 9f);
+                    var elbow = lowerR.position + fwd * (0.02f * Height) - side * (0.01f + 0.02f * pump) * Height;
+                    SolveArm(upperL, lowerL, handL, elbow, honourWeight);
+                }
             }
 
             if (GunPose > 0.001f && upperR != null && lowerR != null && handR != null && head != null)

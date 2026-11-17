@@ -65,8 +65,16 @@ namespace Menteur.Core
         public const int MinPlayers = 2;
         public const int MaxPlayers = 6;
         public const int Chambers = 6;
-        public const int SkinCount = 5;
-        public static readonly string[] SkinNames = { "Chevalier", "Barbare", "Mage", "Voleuse", "Encapuchonnée" };
+        public const int SkinCount = 9;
+
+        /// <summary>Gestes disponibles en jeu.</summary>
+        public static readonly string[] EmoteNames = { "Frapper la table", "Bravo", "Menace", "Bras d'honneur" };
+        public static readonly string[] EmoteShort = { "Poing", "Bravo", "Menace", "Bras" };
+        public static readonly string[] SkinNames =
+        {
+            "Chevalier", "Barbare", "Mage", "Voleuse", "Encapuchonnée",
+            "Squelette", "Guerrier mort", "Spectre", "Liche",
+        };
 
         /// <summary>Jusqu'à 4 joueurs : 6 Rois, 6 Dames, 6 As (+ jokers) ; davantage au-delà.</summary>
         public static Dictionary<Rank, int> DeckComposition(int players, int? jokers = null)
