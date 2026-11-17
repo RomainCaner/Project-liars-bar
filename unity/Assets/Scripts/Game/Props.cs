@@ -14,7 +14,7 @@ namespace Menteur.Game
         // Hauteur native de chaque modèle (mesurée sur les fichiers du pack).
         static readonly Dictionary<string, float> NativeHeight = new Dictionary<string, float>
         {
-            { "table_long", 1.0f }, { "table_medium", 1.0f }, { "chair", 1.23f }, { "stool", 0.5f },
+            { "table_long", 1.0f }, { "table_medium", 1.0f }, { "table_round_A", 1.0f }, { "chair", 1.23f }, { "stool", 0.5f },
             { "barrel_large", 2.0f }, { "barrel_small", 1.02f }, { "barrel_small_stack", 1.77f },
             { "keg", 2.05f }, { "keg_decorated", 2.05f }, { "crates_stacked", 2.14f },
             { "bottle_A_brown", 0.89f }, { "bottle_A_labeled_green", 0.89f }, { "bottle_B_green", 0.89f },
@@ -26,8 +26,15 @@ namespace Menteur.Game
         };
 
         static readonly Dictionary<string, GameObject> cache = new Dictionary<string, GameObject>();
-        static Texture2D texture;
-        static bool textureLoaded;
+        static readonly Dictionary<string, Texture2D> textures = new Dictionary<string, Texture2D>();
+
+        // Les modèles du pack Restaurant utilisent leur propre texture.
+        static Texture2D TextureFor(string name)
+        {
+            var file = name.StartsWith("table_round") ? "restaurantbits_texture" : "dungeon_texture";
+            if (!textures.TryGetValue(file, out var t)) textures[file] = t = Resources.Load<Texture2D>("Props/" + file);
+            return t;
+        }
 
         public static bool Available => Load("table_long") != null;
 
@@ -50,11 +57,7 @@ namespace Menteur.Game
             holder.SetParent(parent, false);
             var model = Object.Instantiate(prefab, holder).transform;
             model.localPosition = Vector3.zero;
-            if (!textureLoaded)
-            {
-                textureLoaded = true;
-                texture = Resources.Load<Texture2D>("Props/dungeon_texture");
-            }
+            var texture = TextureFor(name);
             foreach (var r in model.GetComponentsInChildren<Renderer>(true))
             {
                 r.shadowCastingMode = shadows ? UnityEngine.Rendering.ShadowCastingMode.On : UnityEngine.Rendering.ShadowCastingMode.Off;

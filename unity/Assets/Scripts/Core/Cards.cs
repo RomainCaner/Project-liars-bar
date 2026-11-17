@@ -66,6 +66,10 @@ namespace Menteur.Core
         public const int MaxPlayers = 6;
         public const int Chambers = 6;
         public const int SkinCount = 9;
+
+        /// <summary>Gestes disponibles en jeu.</summary>
+        public static readonly string[] EmoteNames = { "Frapper la table", "Bravo", "Menace", "Bras d'honneur" };
+        public static readonly string[] EmoteShort = { "Poing", "Bravo", "Menace", "Bras" };
         public static readonly string[] SkinNames =
         {
             "Chevalier", "Barbare", "Mage", "Voleuse", "Encapuchonnée",

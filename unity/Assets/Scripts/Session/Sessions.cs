@@ -29,6 +29,7 @@ namespace Menteur.Session
         public abstract void CallLiar();
         public abstract void Shoot();
         public abstract void ChooseSkin(int skin);
+        public abstract void Emote(int emote);
 
         /// <summary>À appeler à chaque image.</summary>
         public abstract void Tick();
@@ -128,6 +129,11 @@ namespace Menteur.Session
                     case "skin":
                         if (pid == null) return;
                         Engine.SetSkin(pid, m.Int("skin"));
+                        Changed();
+                        break;
+                    case "emote":
+                        if (pid == null) return;
+                        Engine.Emote(pid, m.Int("e"));
                         Changed();
                         break;
                 }
@@ -270,6 +276,7 @@ namespace Menteur.Session
         public override void CallLiar() => Act(() => Engine.CallLiar(HostId));
         public override void Shoot() => Act(() => Engine.PullTrigger(HostId));
         public override void ChooseSkin(int skin) => Act(() => Engine.SetSkin(HostId, skin));
+        public override void Emote(int emote) => Act(() => Engine.Emote(HostId, emote));
 
         // ----------------------------------------------------------- diffusion
 
@@ -308,10 +315,18 @@ namespace Menteur.Session
             pending = f;
         }
 
+        // Clé de l'état « de jeu » (hors gestes) : un geste ne doit relancer ni le minuteur ni les bots.
+        string GameKey() => Engine.Phase + "|" + Engine.Round + "|" + Engine.CurrentIndex + "|" + Engine.PileCount + "|" +
+                            Engine.ShooterId + "|" + Engine.LastShotDied + "|" + Engine.Seats.Count + "|" +
+                            string.Join(",", Engine.Seats.Select(x => x.Connected ? "1" : "0")) + "|" + Engine.Settings.TurnSeconds;
+        string scheduledKey;
+
         void Schedule()
         {
-            if (scheduledFor == Engine.Version) return;
+            var key = GameKey();
+            if (scheduledFor == Engine.Version || key == scheduledKey) return;
             scheduledFor = Engine.Version;
+            scheduledKey = key;
             pending = null;
             deadline = null;
             var secs = Engine.Settings.TurnSeconds;
@@ -543,6 +558,9 @@ namespace Menteur.Session
 
         public override void ChooseSkin(int skin) =>
             Send(new Dictionary<string, object> { { "t", "skin" }, { "skin", skin } });
+
+        public override void Emote(int emote) =>
+            Send(new Dictionary<string, object> { { "t", "emote" }, { "e", emote } });
 
         public override void Close()
         {

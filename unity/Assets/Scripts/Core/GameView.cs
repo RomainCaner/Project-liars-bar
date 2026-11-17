@@ -42,6 +42,9 @@ namespace Menteur.Core
         public List<string> Log;
         public GameSettings Settings;
 
+        /// <summary>Dernier geste de chaque joueur : (geste, numéro d'ordre).</summary>
+        public Dictionary<string, KeyValuePair<int, int>> Emotes = new Dictionary<string, KeyValuePair<int, int>>();
+
         /// <summary>Millisecondes restantes au minuteur au moment de la réception.</summary>
         public int? TurnLeftMs;
         public DateTime ReceivedAt;
@@ -85,6 +88,11 @@ namespace Menteur.Core
             var d = j.Get("deck").Obj();
             if (d != null) foreach (var e in d) v.Deck[(Rank)int.Parse(e.Key)] = d.Int(e.Key);
             v.Log = j.Get("log").Arr().Select(x => x as string ?? "").ToList();
+            foreach (var e in j.Get("emotes").Arr())
+            {
+                var o = e.Obj();
+                if (o?.Str("id") != null) v.Emotes[o.Str("id")] = new KeyValuePair<int, int>(o.Int("e"), o.Int("n"));
+            }
             return v;
         }
 

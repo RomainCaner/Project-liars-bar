@@ -277,6 +277,32 @@ static class Program
             host.Close();
         });
 
+        Test("gestes : diffusés à la table sans perturber le jeu", () =>
+        {
+            var host = new HostSession("Hôte", true, HostTimings.Instant, new Random(5));
+            host.StartNetwork();
+            var c = new ClientSession("127.0.0.1", host.Port.Value, "Ana", "ana");
+            Action idle = () => { host.Tick(); c.Tick(); };
+            WaitFor(() => host.Engine.Seats.Count == 2, idle, 10, "connexion");
+            host.UpdateSettings(new GameSettings { Table = 1, TurnSeconds = 30 });
+            WaitFor(() => c.View != null && c.View.Settings.Table == 1, idle, 5, "réglage de table diffusé");
+            c.Emote(3);
+            WaitFor(() => host.View.Emotes.ContainsKey("ana") && host.View.Emotes["ana"].Key == 3, idle, 5, "geste reçu par l'hôte");
+            host.Emote(1);
+            WaitFor(() => c.View.Emotes.ContainsKey("host") && c.View.Emotes["host"].Key == 1, idle, 5, "geste reçu par l'invité");
+            Throws(() => host.Engine.Emote("ana", 99), "geste inconnu");
+            host.StartGame();
+            WaitFor(() => c.View.Phase == Phase.Playing, idle, 5, "partie lancée");
+            var left = c.View.SecondsLeft;
+            var before = host.Engine.Version;
+            host.Emote(0);
+            idle();
+            Check(host.Engine.Version == before + 1, "un geste change la version");
+            Check(host.View.SecondsLeft.HasValue && left.HasValue, "minuteur présent");
+            c.Close();
+            host.Close();
+        });
+
         Test("hôte injoignable", () =>
         {
             var c = new ClientSession("127.0.0.1", 1, "X", "x");

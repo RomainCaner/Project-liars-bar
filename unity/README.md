@@ -33,7 +33,15 @@ APK Android **et** version Windows depuis le même projet.
    dans la scène.
 
 Dans l'éditeur, règle la vue *Game* sur un format portrait (par ex. 1080×2400) pour voir le
-jeu comme sur téléphone. La souris remplace le doigt.
+jeu comme sur téléphone, ou laisse-la en paysage pour la version PC. La souris remplace le doigt.
+
+En jeu :
+
+- **glisser** sur la scène (ou flèches ← →) pour tourner la tête ; la vue revient d'elle-même
+  vers le joueur dont c'est le tour ;
+- **gestes** en bas à gauche, vus par toute la table : frapper la table, bravo, menace,
+  bras d'honneur ;
+- l'hôte choisit la **table ronde** (par défaut) ou **longue** dans le salon.
 
 ## Menu « Menteur »
 
@@ -91,6 +99,7 @@ cd unity/Checks~/Editor && dotnet build   # scripts d'éditeur contre UnityEdito
 
 - Personnages : *KayKit Adventurers* et *KayKit Skeletons* par Kay Lousberg (kaylousberg.com),
   licence CC0 (téléchargés par le menu « Menteur »).
-- Décor de la taverne : *KayKit Dungeon Remastered* (même auteur, CC0), dans `Assets/Resources/Props`.
+- Décor de la taverne : *KayKit Dungeon Remastered* et table ronde de *KayKit Restaurant Bits*
+  (même auteur, CC0), dans `Assets/Resources/Props`.
 - Police des titres : *Rye* par Sorkin Type, licence SIL Open Font License (`Assets/Resources/Fonts/OFL-Rye.txt`).
 - Images des cartes : `web3d/tools/render-cards.mjs` ; sons : `tool/make_sounds.py`.

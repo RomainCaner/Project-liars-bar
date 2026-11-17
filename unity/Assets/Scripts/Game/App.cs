@@ -29,6 +29,10 @@ namespace Menteur.Game
         string pseudo = "", ip = "", toast, joinError;
         float toastUntil, scroll, revealAt, shotAt, flashUntil, ipsAt;
         bool confirmLeave, shootPressed;
+        float emoteReady;
+        // Bulles « geste » au-dessus des joueurs : id -> (texte, fin d'affichage).
+        readonly Dictionary<string, KeyValuePair<string, float>> bubbles = new Dictionary<string, KeyValuePair<string, float>>();
+        readonly Dictionary<string, int> emoteSeen = new Dictionary<string, int>();
         readonly HashSet<int> selected = new HashSet<int>();
         DiscoveryListener discovery;
         List<string> ips = new List<string>();
@@ -176,6 +180,16 @@ namespace Menteur.Game
             selected.RemoveWhere(id => !ids.Contains(id));
             if (!v.CanPlay) selected.Clear();
             if (v.ShotDied == null) shootPressed = false;
+            foreach (var e in v.Emotes)
+            {
+                emoteSeen.TryGetValue(e.Key, out var seen);
+                if (e.Value.Value <= seen) continue;
+                emoteSeen[e.Key] = e.Value.Value;
+                if (p == null) continue; // pas de rejeu des anciens gestes à la connexion
+                var label = e.Value.Key >= 0 && e.Value.Key < Rules.EmoteNames.Length ? Rules.EmoteNames[e.Value.Key] : "?";
+                bubbles[e.Key] = new KeyValuePair<string, float>(label + " !", Time.time + 2.6f);
+                if (e.Value.Key == 0) Sfx.Play("slam", 0.6f);
+            }
             if (p == null)
             {
                 if (v.Phase != Phase.Lobby) Sfx.StartAmbience();
@@ -228,7 +242,22 @@ namespace Menteur.Game
                 }
                 e.Use();
             }
-            Ui.Begin(column: !(screen == Screen_.Table && view != null && view.Phase != Phase.Lobby));
+            var inGame = screen == Screen_.Table && view != null && view.Phase != Phase.Lobby;
+            Ui.Begin(column: !inGame);
+            if (inGame && !confirmLeave)
+            {
+                // Glisser sur la scène (souris ou doigt) pour tourner la tête ; flèches au clavier.
+                if (e.type == EventType.MouseDrag && GUIUtility.hotControl == 0)
+                {
+                    table.Look(e.delta.x / Ui.Scale, e.delta.y / Ui.Scale);
+                    e.Use();
+                }
+                else if (e.type == EventType.KeyDown && (e.keyCode == KeyCode.LeftArrow || e.keyCode == KeyCode.RightArrow))
+                {
+                    table.Look(e.keyCode == KeyCode.LeftArrow ? -60 : 60, 0);
+                    e.Use();
+                }
+            }
             switch (screen)
             {
                 case Screen_.Home: DrawHome(); break;
@@ -440,7 +469,7 @@ namespace Menteur.Game
             var top = Ui.SafeTop + 54;
             var bottomH = host != null ? 118f : 50f;
             var area = Ui.R(0, top, Ui.W, Ui.H - top - Ui.SafeBottom - bottomH);
-            var contentH = (host != null && host.Online ? 92 : 30) + 218 + 190 + 34 + v.Players.Count * 46 + 16;
+            var contentH = (host != null && host.Online ? 92 : 30) + 218 + 230 + 34 + v.Players.Count * 46 + 16;
             Ui.BeginScroll(area, ref scroll, contentH);
             var y = top + 4;
 
@@ -495,9 +524,14 @@ namespace Menteur.Game
             var bullets = Chips(y + 40, "Balles", BulletOptions, new[] { "1", "2" }, s.Bullets, host != null);
             var respin = Chips(y + 80, "Barillet", new[] { 0, 1 }, new[] { "Classique", "Re-tourné" }, s.Respin ? 1 : 0, host != null);
             var timer = Chips(y + 120, "Minuteur", TimerOptions, new[] { "Aucun", "20 s", "30 s", "45 s" }, s.TurnSeconds, host != null);
-            if (host != null && (jokers != s.Jokers || bullets != s.Bullets || (respin == 1) != s.Respin || timer != s.TurnSeconds))
-                host.UpdateSettings(new GameSettings { Jokers = jokers, Bullets = bullets, Respin = respin == 1, TurnSeconds = timer });
-            y += 160;
+            var tableStyle = Chips(y + 160, "Table", new[] { 0, 1 }, new[] { "Ronde", "Longue" }, s.Table, host != null);
+            if (host != null && (jokers != s.Jokers || bullets != s.Bullets || (respin == 1) != s.Respin || timer != s.TurnSeconds ||
+                                 tableStyle != s.Table))
+                host.UpdateSettings(new GameSettings
+                {
+                    Jokers = jokers, Bullets = bullets, Respin = respin == 1, TurnSeconds = timer, Table = tableStyle,
+                });
+            y += 200;
 
             // Joueurs
             Ui.Title(Ui.R(20, y, 300, 24), "Joueurs (" + v.Players.Count + "/" + Rules.MaxPlayers + ")", 15, Ui.Gold,
@@ -640,6 +674,13 @@ namespace Menteur.Game
             {
                 var p = e.Key;
                 var r = e.Value;
+                if (bubbles.TryGetValue(p.Id, out var bubble) && Time.time < bubble.Value)
+                {
+                    var bw = Mathf.Max(r.width, 140f);
+                    var br = Ui.R(r.center.x - bw / 2, r.y - 30, bw, 26);
+                    Ui.Panel(br, new Color(0.96f, 0.92f, 0.83f, 0.96f), 13);
+                    Ui.Label(br, bubble.Key, 12, Ui.Ink, TextAnchor.MiddleCenter, true);
+                }
                 var current = v.Phase == Phase.Playing && v.CurrentId == p.Id;
                 Ui.Panel(r, current ? new Color(0.26f, 0.17f, 0.05f, 0.93f) : new Color(0.05f, 0.035f, 0.025f, 0.82f), 12,
                     current ? Ui.Gold : new Color(1, 1, 1, 0.18f));
@@ -770,6 +811,22 @@ namespace Menteur.Game
                 Ui.Shadowed(Ui.R(0, bottom - 50, W, 30), "Tu regardes les autres s'entretuer.", 14, Ui.Muted, TextAnchor.MiddleCenter, false);
                 return;
             }
+
+            // Gestes (visibles par toute la table).
+            var ready = Time.time >= emoteReady;
+            for (var i = 0; i < Rules.EmoteShort.Length; i++)
+            {
+                var col = i % 2;
+                var row = i / 2;
+                var er = Ui.R(10 + col * 76, bottom - 196 + row * 40, 72, 34);
+                if (Ui.Button(er, Rules.EmoteShort[i], new Color(0.12f, 0.08f, 0.06f, 0.9f), Ui.Cream, 12, ready))
+                {
+                    emoteReady = Time.time + 1.6f;
+                    session.Emote(i);
+                }
+            }
+            if (bubbles.TryGetValue(v.MyId, out var mine) && Time.time < mine.Value)
+                Ui.Shadowed(Ui.R(10, bottom - 222, 220, 22), "Toi : " + mine.Key, 12.5f, Ui.Gold, TextAnchor.MiddleLeft);
 
             // Ma main, en éventail.
             var n = v.Hand.Count;

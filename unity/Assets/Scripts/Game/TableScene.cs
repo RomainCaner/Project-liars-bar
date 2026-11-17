@@ -46,8 +46,27 @@ namespace Menteur.Game
         float shake, camRoll, camDrop;
         Vector3 camBase;
 
-        static readonly Vector3 Pile = new Vector3(0, TableY + 0.012f, 0.05f);
-        static readonly Vector3 GunRest = new Vector3(0.22f, TableY + 0.035f, -0.62f);
+        // Position du tas et du revolver : dépend de la forme de la table.
+        Vector3 Pile = new Vector3(0, TableY + 0.012f, 0.0f);
+        Vector3 GunRest = new Vector3(0.28f, TableY + 0.035f, -0.5f);
+        const float RoundRadius = 1.5f * Props.F;   // table_round_A : 3 unités natives de diamètre
+        const float RoundSeat = 1.36f;              // distance des chaises au centre
+        int tableStyle = -1;
+        Transform tableGroup;
+        Vector3 mySeat = new Vector3(0, 0, -RoundSeat);
+
+        // Regard libre (glisser à la souris / au doigt) et regard automatique vers le joueur actif.
+        float lookYaw, lookPitch, autoYaw, lastManualLook = -100;
+        readonly Dictionary<string, int> emoteSeen = new Dictionary<string, int>();
+        readonly List<Drop> drops = new List<Drop>();
+        Material blood;
+
+        sealed class Drop
+        {
+            public Transform T;
+            public Vector3 V;
+            public bool Landed;
+        }
         static readonly Quaternion GunRestRot = Quaternion.Euler(0, 62, 90);
         static Vector3 CamTarget = new Vector3(0, 0.45f, 0.35f);
 
@@ -165,6 +184,8 @@ namespace Menteur.Game
             if (Props.Available) BuildTavern();
             else BuildPrimitiveRoom();
             BuildGun();
+            BuildTable(0);
+            blood = Mat(new Color(0.42f, 0.02f, 0.02f), 0.75f);
         }
 
         Material TexMat(Texture2D t)
@@ -183,16 +204,16 @@ namespace Menteur.Game
             Cam = go.AddComponent<Camera>();
             Cam.clearFlags = CameraClearFlags.SolidColor;
             Cam.backgroundColor = new Color(0.04f, 0.025f, 0.02f);
-            Cam.fieldOfView = 55;
+            Cam.fieldOfView = 60;
             Cam.nearClipPlane = 0.05f;
             Cam.farClipPlane = 40;
             go.AddComponent<AudioListener>();
 
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.36f, 0.27f, 0.22f);
+            RenderSettings.ambientLight = new Color(0.44f, 0.33f, 0.26f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Exponential;
-            RenderSettings.fogDensity = 0.06f;
+            RenderSettings.fogDensity = 0.045f;
             RenderSettings.fogColor = new Color(0.05f, 0.03f, 0.02f);
         }
 
@@ -224,15 +245,6 @@ namespace Menteur.Game
             }
             Prim(PrimitiveType.Cube, world, new Vector3(0, tile + 0.05f, 0), new Vector3(3 * tile, 0.1f, 3 * tile), Mat(new Color(0.07f, 0.045f, 0.03f)), false);
 
-            // Table de jeu et tapis de feutre au centre.
-            Props.Spawn("table_long", world, Vector3.zero);
-            Prim(PrimitiveType.Cube, world, new Vector3(0, TableY + 0.004f, 0.05f), new Vector3(TableW * 0.66f, 0.006f, TableL * 0.62f), felt, false);
-            Props.Spawn("candle_triple", world, new Vector3(0.42f, TableY, 0.8f), 20, 0.32f);
-            Props.Spawn("candle_lit", world, new Vector3(-0.42f, TableY, -0.85f), 0, 0.32f);
-            Props.Spawn("bottle_A_brown", world, new Vector3(-0.46f, TableY, 0.88f), 0, 0.35f);
-            Props.Spawn("bottle_B_green", world, new Vector3(0.46f, TableY, -0.95f), 0, 0.32f);
-            Flame(new Vector3(0.42f, TableY + 0.3f, 0.8f), 1.6f, 3.5f, true);
-            Flame(new Vector3(-0.42f, TableY + 0.3f, -0.85f), 1.3f, 3.5f, false);
 
             // Décor : tonneaux, fûts, caisses, bannières, torches.
             Props.Spawn("barrel_large", world, new Vector3(half - 0.75f, 0, half - 0.75f), 15);
@@ -252,18 +264,75 @@ namespace Menteur.Game
             }
 
             // Lumière principale au-dessus de la table (ombres).
-            var key = AddLight(world, new Vector3(0, 3.0f, -0.3f), new Color(1f, 0.86f, 0.66f), 2.4f, 8, LightType.Spot);
-            key.spotAngle = 75;
+            var key = AddLight(world, new Vector3(0, 3.0f, -0.3f), new Color(1f, 0.86f, 0.66f), 3.2f, 8, LightType.Spot);
+            key.spotAngle = 85;
             key.transform.rotation = Quaternion.LookRotation(new Vector3(0, -1, 0.12f));
             key.shadows = LightShadows.Soft;
             key.shadowStrength = 0.75f;
-            var fill = AddLight(world, Vector3.zero, new Color(1f, 0.78f, 0.6f), 0.35f, 0, LightType.Directional);
+            var fill = AddLight(world, Vector3.zero, new Color(1f, 0.78f, 0.6f), 0.45f, 0, LightType.Directional);
             fill.transform.rotation = Quaternion.LookRotation(new Vector3(0.2f, -0.6f, 1f));
+            // Lumière chaude de face, pour bien voir les visages des adversaires.
+            AddLight(world, new Vector3(0, 1.7f, -0.9f), new Color(1f, 0.74f, 0.5f), 1.1f, 4.5f, LightType.Point);
+            // Contre-jour orangé derrière la table : détache les silhouettes du fond.
+            AddLight(world, new Vector3(0, 2.2f, 2.6f), new Color(1f, 0.55f, 0.28f), 1.6f, 5f, LightType.Point);
         }
 
-        void Flame(Vector3 pos, float intensity, float range, bool shadows)
+        /// <summary>Table ronde (0) ou longue (1), avec tapis, bougies et bouteilles.</summary>
+        void BuildTable(int style)
         {
-            var l = AddLight(world, pos, new Color(1f, 0.62f, 0.32f), intensity, range, LightType.Point);
+            if (tableGroup != null) Destroy(tableGroup.gameObject);
+            tableGroup = new GameObject("TableGroup").transform;
+            tableGroup.SetParent(world, false);
+            tableStyle = style;
+            var parent = tableGroup;
+            if (style == 0)
+            {
+                Pile = new Vector3(0, TableY + 0.012f, 0.0f);
+                GunRest = new Vector3(0.28f, TableY + 0.035f, -0.5f);
+                if (Props.Spawn("table_round_A", parent, Vector3.zero) == null)
+                    Prim(PrimitiveType.Cylinder, parent, new Vector3(0, TableY - 0.04f, 0), new Vector3(RoundRadius * 2, 0.04f, RoundRadius * 2), wood);
+                Prim(PrimitiveType.Cylinder, parent, new Vector3(0, TableY + 0.004f, 0), new Vector3(1.1f, 0.003f, 1.1f), felt, false);
+                Props.Spawn("candle_triple", parent, new Vector3(0.36f, TableY, 0.3f), 20, 0.3f);
+                Props.Spawn("candle_lit", parent, new Vector3(-0.42f, TableY, 0.12f), 0, 0.3f);
+                Props.Spawn("bottle_A_brown", parent, new Vector3(-0.3f, TableY, 0.45f), 0, 0.33f);
+                Flame(parent, new Vector3(0.36f, TableY + 0.28f, 0.3f), 2.0f, 3.5f, true);
+                Flame(parent, new Vector3(-0.42f, TableY + 0.28f, 0.12f), 1.6f, 3.5f, false);
+            }
+            else
+            {
+                Pile = new Vector3(0, TableY + 0.012f, 0.05f);
+                GunRest = new Vector3(0.22f, TableY + 0.035f, -0.62f);
+                if (Props.Spawn("table_long", parent, Vector3.zero) == null)
+                    Prim(PrimitiveType.Cube, parent, new Vector3(0, TableY - 0.04f, 0), new Vector3(TableW, 0.08f, TableL), wood);
+                Prim(PrimitiveType.Cube, parent, new Vector3(0, TableY + 0.004f, 0.05f), new Vector3(TableW * 0.66f, 0.006f, TableL * 0.62f), felt, false);
+                Props.Spawn("candle_triple", parent, new Vector3(0.42f, TableY, 0.8f), 20, 0.32f);
+                Props.Spawn("candle_lit", parent, new Vector3(-0.42f, TableY, -0.85f), 0, 0.32f);
+                Props.Spawn("bottle_A_brown", parent, new Vector3(-0.46f, TableY, 0.88f), 0, 0.35f);
+                Props.Spawn("bottle_B_green", parent, new Vector3(0.46f, TableY, -0.95f), 0, 0.32f);
+                Flame(parent, new Vector3(0.42f, TableY + 0.3f, 0.8f), 2.0f, 3.5f, true);
+                Flame(parent, new Vector3(-0.42f, TableY + 0.3f, -0.85f), 1.6f, 3.5f, false);
+            }
+            if (gunHolder == null)
+            {
+                gun.position = GunRest;
+                gun.rotation = GunRestRot;
+            }
+        }
+
+        /// <summary>Hauteur de la surface sous un point (plateau de la table ou sol).</summary>
+        float SurfaceAt(Vector3 p)
+        {
+            var onTable = tableStyle == 0
+                ? new Vector2(p.x, p.z).magnitude < RoundRadius - 0.02f
+                : Mathf.Abs(p.x) < TableW / 2 - 0.02f && Mathf.Abs(p.z) < TableL / 2 - 0.02f;
+            return onTable ? TableY + 0.006f : 0.005f;
+        }
+
+        void Flame(Vector3 pos, float intensity, float range, bool shadows) => Flame(world, pos, intensity, range, shadows);
+
+        void Flame(Transform parent, Vector3 pos, float intensity, float range, bool shadows)
+        {
+            var l = AddLight(parent, pos, new Color(1f, 0.62f, 0.32f), intensity, range, LightType.Point);
             if (shadows) l.shadows = LightShadows.Soft;
             flames.Add(l);
             flameBase.Add(intensity);
@@ -279,12 +348,7 @@ namespace Menteur.Game
             Prim(PrimitiveType.Cube, world, new Vector3(0, h / 2, -4), new Vector3(8, h, 0.2f), stone, false);
             Prim(PrimitiveType.Cube, world, new Vector3(-4, h / 2, 0), new Vector3(0.2f, h, 8), stone, false);
             Prim(PrimitiveType.Cube, world, new Vector3(4, h / 2, 0), new Vector3(0.2f, h, 8), stone, false);
-            Prim(PrimitiveType.Cube, world, new Vector3(0, TableY - 0.04f, 0), new Vector3(TableW, 0.08f, TableL), wood);
-            Prim(PrimitiveType.Cube, world, new Vector3(0, TableY + 0.004f, 0.05f), new Vector3(TableW * 0.66f, 0.006f, TableL * 0.62f), felt, false);
-            foreach (var x in new[] { -0.5f, 0.5f })
-            foreach (var z in new[] { -1.0f, 1.0f })
-                Prim(PrimitiveType.Cube, world, new Vector3(x, (TableY - 0.08f) / 2, z), new Vector3(0.08f, TableY - 0.08f, 0.08f), darkWood);
-            Flame(new Vector3(0, TableY + 0.5f, 0.3f), 2f, 5f, true);
+            Prim(PrimitiveType.Cylinder, world, new Vector3(0, (TableY - 0.08f) / 2, 0), new Vector3(0.18f, (TableY - 0.08f) / 2, 0.18f), darkWood);
             var key = AddLight(world, new Vector3(0, 3.0f, -0.3f), new Color(1f, 0.86f, 0.66f), 2.2f, 8, LightType.Spot);
             key.spotAngle = 80;
             key.transform.rotation = Quaternion.LookRotation(Vector3.down);
@@ -366,7 +430,8 @@ namespace Menteur.Game
 
         // ----------------------------------------------------------------- sièges
 
-        static string KeyOf(GameView v) => string.Join("|", v.Players.Select(p => p.Id + ":" + p.Skin)) + "#" + v.MyId;
+        static string KeyOf(GameView v) =>
+            string.Join("|", v.Players.Select(p => p.Id + ":" + p.Skin)) + "#" + v.MyId + "#" + v.Settings.Table;
 
         void BuildSeats(GameView v)
         {
@@ -377,44 +442,102 @@ namespace Menteur.Game
             }
             Seats.Clear();
             gunFollow = null;
+            if (v.Settings.Table != tableStyle) BuildTable(v.Settings.Table);
             var ids = v.Players.Select(p => p.Id).ToList();
             var me = Mathf.Max(0, ids.IndexOf(v.MyId));
             var others = ids.Skip(me + 1).Concat(ids.Take(me)).Where(id => id != v.MyId).ToList();
-            var order = SlotOrder[Mathf.Min(5, others.Count)];
-            for (var i = 0; i < others.Count && i < order.Length; i++)
+            var places = new List<Vector3>();
+            if (tableStyle == 0)
             {
-                var slot = Slots[order[i]];
+                // Table ronde : tout le monde en cercle, moi en bas (côté -Z).
+                var n = others.Count + 1;
+                mySeat = new Vector3(0, 0, -RoundSeat);
+                for (var i = 1; i < n; i++)
+                {
+                    var a = i * 2 * Mathf.PI / n;
+                    places.Add(new Vector3(-Mathf.Sin(a) * RoundSeat, 0, -Mathf.Cos(a) * RoundSeat));
+                }
+            }
+            else
+            {
+                mySeat = new Vector3(0, 0, -TableL / 2 - 0.4f);
+                foreach (var name in SlotOrder[Mathf.Min(5, others.Count)])
+                {
+                    var slot = Slots[name];
+                    places.Add(new Vector3(slot.x, 0, slot.y));
+                }
+            }
+            for (var i = 0; i < others.Count && i < places.Count; i++)
+            {
+                var pos = places[i];
                 var player = v.Player(others[i]);
                 var root = new GameObject("Seat-" + others[i]).transform;
                 root.SetParent(world, false);
-                root.position = new Vector3(slot.x, 0, slot.y);
-                var toward = new Vector3(slot.z - slot.x, 0, slot.w - slot.y).normalized;
+                root.position = pos;
+                var toward = tableStyle == 0 || pos.x == 0 ? new Vector3(-pos.x, 0, -pos.z).normalized : new Vector3(-Mathf.Sign(pos.x), 0, 0);
                 root.rotation = Quaternion.LookRotation(toward);
-                BuildChair(root);
+                var chair = BuildChair(root);
                 var rig = CharacterRig.Create(player.Skin, root, wood);
-                Seats[others[i]] = new SeatView
+                var stack = tableStyle == 0
+                    ? toward * -0.56f
+                    : new Vector3(pos.x, 0, pos.z) + toward * (pos.x == 0 ? 0.62f : 0.5f);
+                var seat = new SeatView
                 {
                     Id = others[i], Root = root, Rig = rig, Toward = toward,
-                    StackPos = new Vector3(slot.x, TableY + 0.008f, slot.y) + toward * (slot.x == 0 ? 0.62f : 0.5f),
+                    StackPos = new Vector3(stack.x, TableY + 0.008f, stack.z),
                     NextFidget = Time.time + 4 + UnityEngine.Random.value * 8,
                 };
+                Seats[others[i]] = seat;
+                if (chair != null) StartCoroutine(FitOnChair(rig, chair));
             }
             seatKey = KeyOf(v);
         }
 
-        void BuildChair(Transform root)
+        /// <summary>
+        /// Cale le bassin du personnage sur l'assise de sa chaise (mesurée sur le maillage),
+        /// une fois la pose assise appliquée.
+        /// </summary>
+        System.Collections.IEnumerator FitOnChair(CharacterRig rig, Transform chair)
+        {
+            yield return null;
+            yield return null;
+            if (rig == null || chair == null || rig.Hips == null) yield break;
+            var b = Props.Bounds(chair);
+            var cut = b.min.y + b.size.y * 0.6f;
+            var seatTop = float.MinValue;
+            foreach (var mf in chair.GetComponentsInChildren<MeshFilter>())
+            {
+                var mesh = mf.sharedMesh;
+                if (mesh == null || !mesh.isReadable) continue;
+                foreach (var vtx in mesh.vertices)
+                {
+                    var w = mf.transform.TransformPoint(vtx);
+                    if (w.y < cut && w.y > seatTop) seatTop = w.y;
+                }
+            }
+            if (seatTop == float.MinValue) seatTop = b.min.y + b.size.y * 0.42f;
+            var seatCenter = new Vector3(b.center.x, seatTop, b.center.z);
+            var hips = rig.Hips.position;
+            var fwd = rig.transform.forward;
+            var dy = Mathf.Clamp(seatTop + 0.06f - hips.y, -0.4f, 0.4f);
+            var dz = Mathf.Clamp(Vector3.Dot(seatCenter - hips, fwd) - 0.03f, -0.25f, 0.25f);
+            rig.transform.position += Vector3.up * dy + fwd * dz;
+        }
+
+        Transform BuildChair(Transform root)
         {
             var chair = Props.Spawn("chair", root, Vector3.zero);
             if (chair != null)
             {
                 Props.FaceUpperPart(chair, -root.forward);
-                return;
+                return chair;
             }
             Prim(PrimitiveType.Cube, root, new Vector3(0, 0.33f, -0.05f), new Vector3(0.42f, 0.05f, 0.4f), darkWood);
             Prim(PrimitiveType.Cube, root, new Vector3(0, 0.6f, -0.24f), new Vector3(0.42f, 0.52f, 0.05f), darkWood);
             foreach (var x in new[] { -0.18f, 0.18f })
             foreach (var z in new[] { -0.22f, 0.12f })
                 Prim(PrimitiveType.Cube, root, new Vector3(x, 0.165f, z), new Vector3(0.04f, 0.33f, 0.04f), darkWood, false);
+            return null;
         }
 
         /// <summary>Cartes en main, posées face cachée devant le joueur.</summary>
@@ -569,11 +692,90 @@ namespace Menteur.Game
             }
             else if (seat != null)
             {
+                Blood(seat);
                 seat.Rig.Die();
                 gunFollow = null;
                 gunHolder = null;
                 // Le revolver tombe sur la table.
                 MoveTo(gun, GunRest, GunRestRot, 0.5f, 0.15f, 0.1f);
+            }
+        }
+
+        /// <summary>Giclée de sang côté opposé au revolver, puis flaque sous la tête.</summary>
+        void Blood(SeatView seat)
+        {
+            var head = seat.Rig.HeadCenter;
+            var away = -(seat.Rig.GunHand - head);
+            away.y = 0;
+            away = away.sqrMagnitude > 1e-4f ? away.normalized : seat.Root.right;
+            for (var i = 0; i < 34; i++)
+            {
+                var d = Prim(PrimitiveType.Sphere, world, head, Vector3.one * UnityEngine.Random.Range(0.018f, 0.04f), blood, false);
+                var spread = UnityEngine.Random.insideUnitSphere * 0.9f;
+                drops.Add(new Drop
+                {
+                    T = d,
+                    V = (away * UnityEngine.Random.Range(1.2f, 2.8f) + Vector3.up * UnityEngine.Random.Range(0.4f, 1.8f) + spread),
+                });
+            }
+            // Flaque qui s'étend là où la tête retombe (devant le joueur, sur la table).
+            var pool = Prim(PrimitiveType.Cylinder, world, Vector3.zero, Vector3.zero, blood, false);
+            var p = seat.Root.position + seat.Toward * 0.42f;
+            p.y = SurfaceAt(p) + 0.002f;
+            pool.position = p;
+            Run(2.2f, e =>
+            {
+                if (pool != null) pool.localScale = new Vector3(0.34f * e, 0.002f, 0.28f * e);
+            }, 0.7f, true);
+        }
+
+        void UpdateDrops(float dt)
+        {
+            foreach (var d in drops)
+            {
+                if (d.Landed || d.T == null) continue;
+                d.V += Vector3.down * 9.8f * dt;
+                var p = d.T.position + d.V * dt;
+                var floor = SurfaceAt(p);
+                if (p.y <= floor)
+                {
+                    // La goutte s'écrase et laisse une tache.
+                    d.Landed = true;
+                    p.y = floor + 0.001f;
+                    var size = d.T.localScale.x * UnityEngine.Random.Range(1.6f, 2.8f);
+                    d.T.localScale = new Vector3(size, 0.0015f, size * UnityEngine.Random.Range(0.8f, 1.6f));
+                    d.T.rotation = Quaternion.Euler(0, UnityEngine.Random.value * 360, 0);
+                }
+                d.T.position = p;
+            }
+        }
+
+        /// <summary>Le joueur fait glisser la vue (dx, dy en pixels virtuels).</summary>
+        public void Look(float dx, float dy)
+        {
+            lookYaw = Mathf.Clamp(lookYaw + dx * 0.25f, -95, 95);
+            lookPitch = Mathf.Clamp(lookPitch + dy * 0.2f, -25, 30);
+            lastManualLook = Time.time;
+        }
+
+        void PlayEmote(SeatView s, int emote)
+        {
+            switch (emote)
+            {
+                case 0:
+                    s.Rig.Gesture("Unarmed_Melee_Attack_Punch_A", speed: 1.1f);
+                    After(0.35f, () => shake = Mathf.Max(shake, 0.012f));
+                    break;
+                case 1:
+                    s.Rig.Gesture("Cheer", speed: 1.1f);
+                    break;
+                case 2:
+                    s.Rig.Gesture("1H_Ranged_Aiming", hold: true);
+                    After(1.8f, () => s.Rig.ToIdle());
+                    break;
+                case 3:
+                    s.Rig.BrasDHonneur();
+                    break;
             }
         }
 
@@ -587,6 +789,14 @@ namespace Menteur.Game
                 return;
             }
             var rebuilt = KeyOf(v) != seatKey;
+            // Gestes des autres joueurs (on ne rejoue pas les anciens à la première synchro).
+            foreach (var e in v.Emotes)
+            {
+                emoteSeen.TryGetValue(e.Key, out var seen);
+                if (e.Value.Value <= seen) continue;
+                emoteSeen[e.Key] = e.Value.Value;
+                if (prev != null && !rebuilt && Seats.TryGetValue(e.Key, out var es) && !es.Rig.Dead) PlayEmote(es, e.Value.Key);
+            }
             if (rebuilt) BuildSeats(v);
             var newRound = prev == null || rebuilt || v.Round != prev.Round;
             if (newRound)
@@ -691,20 +901,62 @@ namespace Menteur.Game
             RunTweens();
             var t = Time.time;
 
-            // Cadrage : assis au bout de la table ; sur écran étroit, on recule et on monte.
+            // Cadrage : assis à ma place ; sur écran étroit, on recule et on monte.
             var halfH = Mathf.Atan(Mathf.Tan(Cam.fieldOfView * Mathf.Deg2Rad / 2) * Cam.aspect);
-            var needed = 1.55f / Mathf.Tan(halfH) - 2.35f;
-            var back = Mathf.Max(0, needed);
-            camBase = new Vector3(0, 1.45f + back * 0.55f, -2.35f - back);
-            CamTarget = new Vector3(0, 0.45f, 0.35f);
+            Vector3 eye, look;
+            if (tableStyle == 0)
+            {
+                var back = Mathf.Max(0, 1.0f / Mathf.Tan(halfH) - 1.6f);
+                var outward = mySeat.sqrMagnitude > 1e-4f ? mySeat.normalized : Vector3.back;
+                eye = mySeat + outward * (0.22f + back) + Vector3.up * (1.12f + back * 0.45f);
+                look = new Vector3(0, TableY, 0) - outward * 0.25f;
+            }
+            else
+            {
+                var back = Mathf.Max(0, 1.55f / Mathf.Tan(halfH) - 2.35f);
+                eye = new Vector3(0, 1.45f + back * 0.55f, -2.35f - back);
+                look = new Vector3(0, 0.45f, 0.35f);
+            }
+            camBase = eye;
+            CamTarget = look;
+
+            // Regard automatique vers le joueur actif, sauf si on vient de bouger la vue soi-même.
+            if (Time.time - lastManualLook > 3f)
+            {
+                string who = null;
+                if (prev != null) who = prev.Phase == Phase.Roulette ? prev.ShooterId : prev.CurrentId;
+                var want = 0f;
+                if (who != null && Seats.TryGetValue(who, out var ws))
+                {
+                    var baseDir = look - eye;
+                    baseDir.y = 0;
+                    var to = ws.Rig.HeadCenter - eye;
+                    to.y = 0;
+                    want = Mathf.Clamp(Vector3.SignedAngle(baseDir, to, Vector3.up), -80, 80) * 0.85f;
+                }
+                autoYaw = Mathf.Lerp(autoYaw, want, Time.deltaTime * 2.2f);
+                lookYaw = Mathf.Lerp(lookYaw, 0, Time.deltaTime * 2.5f);
+                lookPitch = Mathf.Lerp(lookPitch, 0, Time.deltaTime * 2.5f);
+            }
             shake *= 0.9f;
             var jitter = new Vector3((UnityEngine.Random.value - 0.5f) * shake, (UnityEngine.Random.value - 0.5f) * shake, 0);
             Cam.transform.position = camBase + jitter + Vector3.up * (Mathf.Sin(t * 0.7f) * 0.01f - camDrop);
-            Cam.transform.rotation = Quaternion.LookRotation(CamTarget - Cam.transform.position) * Quaternion.Euler(0, 0, camRoll);
+            var baseRot = Quaternion.LookRotation(CamTarget - camBase);
+            var e2 = baseRot.eulerAngles;
+            Cam.transform.rotation = Quaternion.Euler(e2.x + lookPitch, e2.y + autoYaw + lookYaw, camRoll);
+            UpdateDrops(Time.deltaTime);
 
             // Les flammes vacillent.
-            for (var i = 0; i < flames.Count; i++)
+            for (var i = flames.Count - 1; i >= 0; i--)
+            {
+                if (flames[i] == null)
+                {
+                    flames.RemoveAt(i);
+                    flameBase.RemoveAt(i);
+                    continue;
+                }
                 flames[i].intensity = flameBase[i] * (0.82f + 0.3f * Mathf.PerlinNoise(t * 3.1f + i * 7.3f, i));
+            }
 
             // Les joueurs regardent celui dont c'est le tour (ou le tireur).
             string focus = null;
